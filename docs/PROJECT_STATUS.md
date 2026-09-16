@@ -258,7 +258,7 @@ Branch `main`. Commits, all authored and committed as
 - `4917450` — browser verification, backups, lint and full documentation
 - `7444d74` — parameterised compose so a second isolated stack can run, and the
   fresh-setup fixes it uncovered
-- (this commit) — light/dark/system theme and the public homepage
+- `ca43303` — light/dark/system theme and the public homepage
 
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.
