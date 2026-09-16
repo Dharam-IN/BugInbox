@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, resources, type Owner } from './api.ts';
 
@@ -29,18 +29,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 30_000,
   });
 
-  const value: AuthValue = {
-    owner: query.data ?? null,
-    loading: query.isLoading,
-    refresh: async () => {
-      await client.invalidateQueries({ queryKey: ['me'] });
-    },
-    signOut: async () => {
-      await resources.logout().catch(() => undefined);
-      client.clear();
-      await client.invalidateQueries({ queryKey: ['me'] });
-    },
-  };
+  const refresh = useCallback(async () => {
+    await client.invalidateQueries({ queryKey: ['me'] });
+  }, [client]);
+
+  const signOut = useCallback(async () => {
+    await resources.logout().catch(() => undefined);
+    client.clear();
+    await client.invalidateQueries({ queryKey: ['me'] });
+  }, [client]);
+
+  // Stable identity, so components may safely depend on the whole context value.
+  const value = useMemo<AuthValue>(
+    () => ({ owner: query.data ?? null, loading: query.isLoading, refresh, signOut }),
+    [query.data, query.isLoading, refresh, signOut],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

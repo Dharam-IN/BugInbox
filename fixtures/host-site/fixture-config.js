@@ -12,7 +12,7 @@
   function readParam(name) {
     try {
       return new URL(window.location.href).searchParams.get(name);
-    } catch (err) {
+    } catch {
       return null;
     }
   }
@@ -20,7 +20,7 @@
   function remember(key, value) {
     try {
       if (value) window.localStorage.setItem(key, value);
-    } catch (err) {
+    } catch {
       /* private mode: fall back to this page load only */
     }
   }
@@ -28,7 +28,7 @@
   function recall(key) {
     try {
       return window.localStorage.getItem(key);
-    } catch (err) {
+    } catch {
       return null;
     }
   }

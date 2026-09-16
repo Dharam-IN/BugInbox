@@ -74,3 +74,32 @@ Widget configuration is cached by browsers for a documented window, so a paused
 project can still look active to a client. Ingestion re-reads the project row on
 every submission and rejects reports with `project_paused`. Widget settings are
 convenience and presentation; they are never an authorisation boundary.
+
+## D13 — The fixture host site uses external scripts under a strict CSP
+The fixture sends a restrictive `Content-Security-Policy` with no
+`'unsafe-inline'`, which initially blocked its own inline `<script>` blocks.
+Rather than loosening the policy, the page scripts were moved to separate files.
+The strict policy stays, so the fixture proves the widget works on a site that
+actually has one.
+
+## D14 — nginx re-resolves the API upstream per request
+`proxy_pass http://api:3000` resolves once at start-up, so rebuilding the API
+container left the proxy serving 502s against a stale address. The proxy now
+uses Docker's embedded resolver with a variable upstream, which matters in a
+development loop where containers are rebuilt constantly.
+
+## D15 — Browser tests clear rate-limit counters before running
+The suite signs up several owners in a row, which trips the per-IP
+authentication limit that the API tests assert on. Playwright's global setup
+deletes only the limiter keys from Redis. The limit stays real; the suite stays
+re-runnable.
+
+## D16 — Widget bundle size and no framework on host pages
+The bundle is ~28 KiB minified with no framework. React is a dashboard
+dependency only; nothing of it reaches a host website.
+
+## D17 — Screenshots are bounded by pixels as well as by bytes
+A 5 MiB byte limit alone does not stop a highly compressible image that decodes
+to an enormous bitmap. Dimensions (10,000 px per side) and total pixels
+(40 million) are checked from decoded metadata, and sharp's `limitInputPixels`
+guards the decode itself.

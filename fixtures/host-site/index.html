@@ -42,25 +42,7 @@
     </main>
 
     <p class="host-ribbon">Host ribbon with z-index 999999</p>
-
-    <script>
-      var clicks = 0;
-      document.getElementById('host-counter').addEventListener('click', function () {
-        clicks += 1;
-        this.textContent = 'Host clicks: ' + clicks;
-      });
-      document.getElementById('host-alert').addEventListener('click', function () {
-        document.getElementById('host-message').textContent = 'Host message: the page still works';
-      });
-
-      window.BUGINBOX_FIXTURE.load();
-
-      setInterval(function () {
-        var state = window.BugInbox ? window.BugInbox.state() : null;
-        document.getElementById('widget-state').textContent = state
-          ? 'eligible=' + state.eligible + ' launcher=' + state.launcherVisible + ' form=' + state.formOpen + ' — ' + state.reason
-          : 'BugInbox is not loaded on this page.';
-      }, 300);
-    </script>
+    <script src="/status.js" defer></script>
+    <script src="/home.js" defer></script>
   </body>
 </html>

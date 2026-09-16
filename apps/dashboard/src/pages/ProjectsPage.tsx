@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resources } from '../api.ts';
 import { useAuth } from '../auth.tsx';
-import { Card, CardHeader, Empty, ErrorNotice, Loading, Notice, formatBytes, formatRelative } from '../components/ui.tsx';
+import { Card, Empty, ErrorNotice, Loading, Notice, formatBytes, formatRelative } from '../components/ui.tsx';
 
 export function ProjectsPage() {
   const query = useQuery({ queryKey: ['projects'], queryFn: resources.projects });

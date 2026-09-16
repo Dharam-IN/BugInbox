@@ -66,10 +66,4 @@
   });
 
   render();
-  setInterval(function () {
-    var state = window.BugInbox ? window.BugInbox.state() : null;
-    document.getElementById('widget-state').textContent = state
-      ? 'initialised=' + state.initialised + ' eligible=' + state.eligible + ' launcher=' + state.launcherVisible + ' form=' + state.formOpen + ' — ' + state.reason
-      : 'BugInbox is not loaded.';
-  }, 300);
 })();

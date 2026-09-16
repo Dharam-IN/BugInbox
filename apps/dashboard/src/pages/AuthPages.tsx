@@ -266,6 +266,7 @@ export function VerifyEmailPage() {
   const [params] = useSearchParams();
   const auth = useAuth();
   const token = params.get('token') ?? '';
+  const refresh = auth.refresh;
   const [state, setState] = useState<'pending' | 'ok' | 'failed'>('pending');
   const [error, setError] = useState<unknown>(null);
 
@@ -281,7 +282,7 @@ export function VerifyEmailPage() {
         await resources.verifyEmail(token);
         if (cancelled) return;
         setState('ok');
-        await auth.refresh();
+        await refresh();
       } catch (err) {
         if (cancelled) return;
         setError(err);
@@ -291,9 +292,8 @@ export function VerifyEmailPage() {
     return () => {
       cancelled = true;
     };
-    // auth.refresh is stable enough for this one-shot effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+    // `refresh` is stable, so this runs once per confirmation link.
+  }, [token, refresh]);
 
   return (
     <AuthShell>

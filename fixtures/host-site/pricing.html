@@ -26,14 +26,7 @@
         <p class="status" id="widget-state">Loading…</p>
       </div>
     </main>
-    <script>
-      window.BUGINBOX_FIXTURE.load();
-      setInterval(function () {
-        var state = window.BugInbox ? window.BugInbox.state() : null;
-        document.getElementById('widget-state').textContent = state
-          ? 'eligible=' + state.eligible + ' launcher=' + state.launcherVisible + ' — ' + state.reason
-          : 'BugInbox is not loaded.';
-      }, 300);
-    </script>
+    <script src="/status.js" defer></script>
+    <script src="/simple.js" defer></script>
   </body>
 </html>

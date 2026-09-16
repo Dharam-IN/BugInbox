@@ -23,10 +23,23 @@ export function getRedis(): Redis {
   return client;
 }
 
-export async function redisHealthy(): Promise<boolean> {
+export async function redisHealthy(timeoutMs = 1500): Promise<boolean> {
+  const client = getRedis();
+  // Offline queueing is disabled, so a PING issued mid-handshake fails even
+  // though Redis is fine. Give the connection a moment to reach "ready" first.
+  if (client.status !== 'ready') {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(finish, timeoutMs);
+      function finish() {
+        clearTimeout(timer);
+        client.off('ready', finish);
+        resolve();
+      }
+      client.once('ready', finish);
+    });
+  }
   try {
-    const pong = await getRedis().ping();
-    return pong === 'PONG';
+    return (await client.ping()) === 'PONG';
   } catch {
     return false;
   }

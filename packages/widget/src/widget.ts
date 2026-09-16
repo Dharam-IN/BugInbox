@@ -546,7 +546,10 @@ export class BugInboxWidget {
   private showForm(): void {
     if (!this.config || this.destroyed || !this.eligible) return;
     if (this.formOpen) return;
-    this.returnFocusTo = document.activeElement;
+    // When focus is already inside the shadow root, document.activeElement is
+    // the (non-focusable) host element, so read through to the real element.
+    const active = document.activeElement;
+    this.returnFocusTo = active === this.host ? (this.shadow?.activeElement ?? this.launcher) : active;
     this.formOpen = true;
     this.dedupeKey = randomKey();
     this.restoreDraft();
@@ -569,7 +572,7 @@ export class BugInboxWidget {
 
     const target = this.returnFocusTo;
     this.returnFocusTo = null;
-    if (target instanceof HTMLElement && target.isConnected) {
+    if (target instanceof HTMLElement && target.isConnected && target !== this.host) {
       target.focus();
     } else if (this.launcher && !this.launcher.hidden) {
       this.launcher.focus();

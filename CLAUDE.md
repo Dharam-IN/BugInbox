@@ -53,9 +53,13 @@ npm run logs                  # follow container logs
 npm run down                  # stop (volumes are preserved)
 
 source scripts/host-env.sh    # point host tooling at the published loopback ports
+npm run lint
 npm run typecheck
 npm test                      # vitest integration tests (needs containers running)
 npm run test:e2e              # Playwright browser verification
+
+./scripts/backup.sh ./backups # database dump plus the screenshot volume
+./scripts/restore.sh <sql.gz> <tar.gz>
 ```
 
 Local URLs (all bound to 127.0.0.1):

@@ -26,9 +26,11 @@
     "logs": "docker compose logs -f"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",
     "eslint": "9.39.5",
+    "globals": "^17.12.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.0"
   },
