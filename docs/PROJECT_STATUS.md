@@ -318,6 +318,8 @@ Branch `main`. Commits, all authored and committed as
   fresh-setup fixes it uncovered
 - `ca43303` — light/dark/system theme and the public homepage
 - `7da462d` — recorded that commit's hash in this document
+- `9560d69` — interface redesign: application shell, overview with real
+  aggregates, guided project setup, structured inbox and report detail
 
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.
