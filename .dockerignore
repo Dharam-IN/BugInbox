@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+!.env.example
+.local
+tests/e2e/.artifacts
+playwright-report
+test-results
+docs
+*.md

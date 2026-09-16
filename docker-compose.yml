@@ -1,0 +1,146 @@
+name: buginbox
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buginbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-buginbox}
+    ports:
+      - "127.0.0.1:${BUGINBOX_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buginbox} -d ${POSTGRES_DB:-buginbox}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [buginbox]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "127.0.0.1:${BUGINBOX_REDIS_PORT:-56379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [buginbox]
+
+  mailpit:
+    image: axllent/mailpit:v1.28
+    restart: unless-stopped
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      # Web UI / API, plus SMTP on loopback so host-run tests can use Mailpit.
+      - "127.0.0.1:${BUGINBOX_MAILPIT_PORT:-58025}:8025"
+      - "127.0.0.1:${BUGINBOX_SMTP_PORT:-51025}:1025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [buginbox]
+
+  api:
+    build:
+      context: .
+      target: server
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-buginbox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-buginbox}
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      STORAGE_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [buginbox]
+
+  worker:
+    build:
+      context: .
+      target: server
+    restart: unless-stopped
+    command: ["node", "apps/server/dist/worker.js"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-buginbox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-buginbox}
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      STORAGE_DIR: /data/uploads
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
+    networks: [buginbox]
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${BUGINBOX_WEB_PORT:-58080}:80"
+    depends_on:
+      api: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      buginbox:
+        ipv4_address: 172.31.250.10
+
+  fixture:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${BUGINBOX_FIXTURE_PORT:-58081}:80"
+    volumes:
+      - ./fixtures/host-site:/usr/share/nginx/html:ro
+      - ./infra/nginx/fixture.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [buginbox]
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+
+networks:
+  buginbox:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24

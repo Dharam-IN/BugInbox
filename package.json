@@ -1,0 +1,38 @@
+{
+  "name": "buginbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BugInbox - website feedback and bug reporting for solo developers",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/widget",
+    "apps/server",
+    "apps/dashboard"
+  ],
+  "scripts": {
+    "build": "npm run build -w @buginbox/shared && npm run build -w @buginbox/widget && npm run build -w @buginbox/server && npm run build -w @buginbox/dashboard",
+    "typecheck": "npm run build -w @buginbox/shared && npm run typecheck -w @buginbox/widget && npm run typecheck -w @buginbox/server && npm run typecheck -w @buginbox/dashboard",
+    "lint": "eslint .",
+    "test": "npm run test -w @buginbox/server",
+    "test:e2e": "playwright test",
+    "migrate": "npm run migrate -w @buginbox/server",
+    "seed": "npm run seed -w @buginbox/server",
+    "up": "docker compose up -d --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.13.5",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

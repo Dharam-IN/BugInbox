@@ -1,0 +1,14 @@
+{
+  "name": "@buginbox/widget",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@buginbox/shared": "*",
+    "esbuild": "0.28.2"
+  }
+}
