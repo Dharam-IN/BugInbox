@@ -12,7 +12,8 @@ import {
 } from '@buginbox/shared';
 import { resources, type Project, type ProjectAppearance } from '../api.ts';
 import { useSystemPrefersDark } from '../theme.tsx';
-import { useProject } from './ProjectLayout.tsx';
+import { AppShell } from '../components/AppShell.tsx';
+import { ProjectTabs, useProjectContext } from './ProjectLayout.tsx';
 import { Card, CardHeader, ErrorNotice, Notice, Segmented } from '../components/ui.tsx';
 
 interface Draft {
@@ -214,7 +215,7 @@ function RuleEditor({
 }
 
 export function SettingsPage() {
-  const project = useProject();
+  const project = useProjectContext();
   const client = useQueryClient();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Draft>(() => toDraft(project));
@@ -268,9 +269,22 @@ export function SettingsPage() {
     setDraft((current) => ({ ...current, appearance: { ...current.appearance, ...patch } }));
 
   return (
-    <div className="stack">
+    <AppShell
+      header={{
+        title: project.name,
+        breadcrumbs: [{ label: 'Projects', to: '/projects' }, { label: project.name }],
+        actions: (
+          <button className="button small" type="button" onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save settings'}
+          </button>
+        ),
+      }}
+    >
+      <div className="page-body">
+        <ProjectTabs project={project} />
+        <div className="stack">
       <Card>
-        <CardHeader title="Project" />
+        <CardHeader title="General" subtitle="What this project is called." />
         <label className="field">
           <span className="field-label">Name</span>
           <input
@@ -558,15 +572,15 @@ export function SettingsPage() {
         </div>
       </Card>
 
+      {/* Saving lives in the page header, which stays visible while scrolling
+          this long form. Only the discard action and the result live here. */}
       <Card>
         <div className="spread">
           <div className="row">
-            <button className="button" type="button" onClick={() => save.mutate()} disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save settings'}
-            </button>
             <button className="button ghost" type="button" onClick={() => setDraft(toDraft(project))} disabled={save.isPending}>
               Discard changes
             </button>
+            <span className="field-hint">Use “Save settings” at the top of the page to apply your changes.</span>
           </div>
           {saved ? <span className="badge resolved">Saved</span> : null}
         </div>
@@ -623,5 +637,7 @@ export function SettingsPage() {
         )}
       </Card>
     </div>
+      </div>
+    </AppShell>
   );
 }

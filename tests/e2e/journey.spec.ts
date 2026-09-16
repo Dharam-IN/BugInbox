@@ -27,9 +27,10 @@ test('owner signs up, installs the widget, receives a report with a screenshot a
     await signUpAndVerify(page, email);
   });
 
-  const projectKey = await test.step('create a project for the fixture website', async () => {
+  const project = await test.step('create a project for the fixture website', async () => {
     return createProject(page, 'Fixture Website', [FIXTURE, 'http://127.0.0.1:58081']);
   });
+  const projectKey = project.key;
 
   await test.step('the snippet is shown with the project key', async () => {
     const snippet = await page.locator('pre.snippet code').first().innerText();
@@ -100,11 +101,11 @@ test('owner signs up, installs the widget, receives a report with a screenshot a
 test('the widget respects page rules, pause and manual triggers', async ({ page, context }) => {
   const email = uniqueEmail('rules');
   await signUpAndVerify(page, email);
-  const projectKey = await createProject(page, 'Rules Website', [FIXTURE]);
+  const project = await createProject(page, 'Rules Website', [FIXTURE]);
+  const projectKey = project.key;
 
   await test.step('exclude the admin section', async () => {
-    const projectUrl = page.url().replace('/install', '/settings');
-    await page.goto(projectUrl);
+    await page.goto(`${WEB}/projects/${project.id}/settings`);
     const excludeInput = page.getByPlaceholder('/checkout/*');
     await excludeInput.fill('/admin/*');
     await excludeInput.press('Enter');
@@ -145,8 +146,7 @@ test('the widget respects page rules, pause and manual triggers', async ({ page,
     await openFixture(reporter, '/', projectKey);
     await expect(widgetRoot(reporter)).toBeVisible();
 
-    const projectUrl = page.url().includes('/settings') ? page.url() : `${page.url()}/settings`;
-    await page.goto(projectUrl);
+    await page.goto(`${WEB}/projects/${project.id}/settings`);
     await page.getByRole('button', { name: 'Pause project' }).click();
     await expect(page.getByRole('button', { name: 'Resume project' })).toBeVisible();
 
@@ -170,10 +170,11 @@ test('the widget respects page rules, pause and manual triggers', async ({ page,
 test('SPA navigation, the host API and host resilience', async ({ page, context }) => {
   const email = uniqueEmail('spa');
   await signUpAndVerify(page, email);
-  const projectKey = await createProject(page, 'SPA Website', [FIXTURE]);
+  const project = await createProject(page, 'SPA Website', [FIXTURE]);
+  const projectKey = project.key;
 
   await test.step('exclude /admin/* so route changes can be observed', async () => {
-    await page.goto(page.url().replace('/install', '/settings'));
+    await page.goto(`${WEB}/projects/${project.id}/settings`);
     const excludeInput = page.getByPlaceholder('/checkout/*');
     await excludeInput.fill('/admin/*');
     await excludeInput.press('Enter');
@@ -245,7 +246,7 @@ test('SPA navigation, the host API and host resilience', async ({ page, context 
 test('the widget form is operable by keyboard alone', async ({ page, context }) => {
   const email = uniqueEmail('a11y');
   await signUpAndVerify(page, email);
-  const projectKey = await createProject(page, 'Keyboard Website', [FIXTURE]);
+  const projectKey = (await createProject(page, 'Keyboard Website', [FIXTURE])).key;
 
   const reporterContext = await context.browser()!.newContext();
   const reporter = await reporterContext.newPage();

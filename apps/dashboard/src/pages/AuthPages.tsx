@@ -1,25 +1,137 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { resources } from '../api.ts';
 import { useAuth } from '../auth.tsx';
-import { Card, CardHeader, ErrorNotice, Notice } from '../components/ui.tsx';
+import { ErrorNotice, Notice } from '../components/ui.tsx';
 import { ThemeSelector } from '../components/ThemeSelector.tsx';
 
 const MIN_PASSWORD = 12;
 
-function AuthShell({ children }: { children: React.ReactNode }) {
+/**
+ * Accessible password field with a reveal control.
+ *
+ * The input keeps its name, id and autocomplete attributes when toggled, so
+ * password managers still recognise and fill it.
+ */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  hint,
+  minLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  hint?: ReactNode;
+  minLength?: number;
+}) {
+  const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
+  const [revealed, setRevealed] = useState(false);
+
   return (
-    <div className="content narrow" style={{ paddingTop: 32 }}>
-      <div className="spread" style={{ marginBottom: 20 }}>
-        <Link className="brand" to="/">
-          <span className="brand-mark" aria-hidden="true">
-            B
-          </span>
-          BugInbox
-        </Link>
-        <ThemeSelector compact />
+    <div className="field">
+      <label className="field-label" htmlFor={fieldId}>
+        {label}
+      </label>
+      <span className="password-field">
+        <input
+          id={fieldId}
+          name={autoComplete === 'current-password' ? 'password' : 'new-password'}
+          type={revealed ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          required
+          minLength={minLength}
+          value={value}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="password-toggle"
+          aria-pressed={revealed}
+          aria-controls={fieldId}
+          onClick={() => setRevealed((current) => !current)}
+        >
+          {revealed ? 'Hide' : 'Show'}
+          <span className="visually-hidden"> password</span>
+        </button>
+      </span>
+      {hint ? (
+        <span className="field-hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+const POINTS = [
+  'One script tag on your website — nothing else to run.',
+  'Visitors report a problem without creating an account.',
+  'Every report arrives with the page, the browser and an optional screenshot.',
+];
+
+/** Branded two-column composition on desktop, single column on mobile. */
+function AuthLayout({
+  title,
+  subtitle,
+  children,
+  footer,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <div className="auth-split">
+      <aside className="auth-aside">
+        <div className="auth-aside-inner">
+          <Link className="brand" to="/">
+            <span className="brand-mark" aria-hidden="true">
+              B
+            </span>
+            BugInbox
+          </Link>
+          <h2>Collect website bug reports with the context you need.</h2>
+          <p>BugInbox is a self-hosted feedback tool for people who look after several websites. You run it yourself.</p>
+          <ul className="auth-points">
+            {POINTS.map((point) => (
+              <li key={point}>
+                <span className="tick" aria-hidden="true">
+                  ✓
+                </span>
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+
+      <div className="auth-panel">
+        <div className="auth-panel-top">
+          <Link className="brand" to="/">
+            <span className="brand-mark" aria-hidden="true">
+              B
+            </span>
+            BugInbox
+          </Link>
+          <ThemeSelector compact />
+        </div>
+
+        <div className="auth-form-wrap">
+          <div>
+            <h1>{title}</h1>
+            {subtitle ? <p className="sub">{subtitle}</p> : null}
+          </div>
+          {children}
+          {footer ? <div className="field-hint">{footer}</div> : null}
+        </div>
       </div>
-      {children}
     </div>
   );
 }
@@ -48,41 +160,35 @@ export function LoginPage() {
   }
 
   return (
-    <AuthShell>
-      <Card>
-        <CardHeader title="Sign in" subtitle="Manage the websites you collect feedback for." />
-        <form className="stack" onSubmit={onSubmit}>
-          <ErrorNotice error={error} />
-          <label className="field">
-            <span className="field-label">Email address</span>
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span className="field-label">Password</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <button className="button" type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-        <p className="field-hint" style={{ marginTop: 14 }}>
+    <AuthLayout
+      title="Sign in"
+      subtitle="Manage the websites you collect feedback for."
+      footer={
+        <>
           <Link to="/forgot-password">Forgotten your password?</Link> · New here?{' '}
           <Link to="/signup">Create an account</Link>
-        </p>
-      </Card>
-    </AuthShell>
+        </>
+      }
+    >
+      <form className="form-grid" onSubmit={onSubmit}>
+        <ErrorNotice error={error} />
+        <label className="field">
+          <span className="field-label">Email address</span>
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <PasswordField label="Password" autoComplete="current-password" value={password} onChange={setPassword} />
+        <button className="button" type="submit" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
 
@@ -113,46 +219,44 @@ export function SignupPage() {
   }
 
   return (
-    <AuthShell>
-      <Card>
-        <CardHeader title="Create your account" subtitle="One account, as many website projects as you need." />
-        <form className="stack" onSubmit={onSubmit}>
-          <ErrorNotice error={error} />
-          <label className="field">
-            <span className="field-label">Email address</span>
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <span className="field-hint">We send report notifications here.</span>
-          </label>
-          <label className="field">
-            <span className="field-label">Password</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={MIN_PASSWORD}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-describedby="password-hint"
-            />
-            <span className="field-hint" id="password-hint">
-              {tooShort ? `${MIN_PASSWORD - password.length} more characters needed.` : `At least ${MIN_PASSWORD} characters.`}
-            </span>
-          </label>
-          <button className="button" type="submit" disabled={busy || password.length < MIN_PASSWORD}>
-            {busy ? 'Creating account…' : 'Create account'}
-          </button>
-        </form>
-        <p className="field-hint" style={{ marginTop: 14 }}>
+    <AuthLayout
+      title="Create your account"
+      subtitle="One account, as many website projects as you need."
+      footer={
+        <>
           Already have an account? <Link to="/login">Sign in</Link>
-        </p>
-      </Card>
-    </AuthShell>
+        </>
+      }
+    >
+      <form className="form-grid" onSubmit={onSubmit}>
+        <ErrorNotice error={error} />
+        <label className="field">
+          <span className="field-label">Email address</span>
+          <input
+            type="email"
+            name="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <span className="field-hint">Report notifications are sent here.</span>
+        </label>
+        <PasswordField
+          label="Password"
+          autoComplete="new-password"
+          value={password}
+          onChange={setPassword}
+          minLength={MIN_PASSWORD}
+          hint={
+            tooShort ? `${MIN_PASSWORD - password.length} more characters needed.` : `At least ${MIN_PASSWORD} characters.`
+          }
+        />
+        <button className="button" type="submit" disabled={busy || password.length < MIN_PASSWORD}>
+          {busy ? 'Creating account…' : 'Create account'}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
 
@@ -177,30 +281,35 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthShell>
-      <Card>
-        <CardHeader title="Reset your password" subtitle="We will email you a link if the address is registered." />
-        {sent ? (
-          <Notice kind="success">
-            If that address has an account, a reset link is on its way. The link is valid for one hour.
-          </Notice>
-        ) : (
-          <form className="stack" onSubmit={onSubmit}>
-            <ErrorNotice error={error} />
-            <label className="field">
-              <span className="field-label">Email address</span>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            </label>
-            <button className="button" type="submit" disabled={busy}>
-              {busy ? 'Sending…' : 'Send reset link'}
-            </button>
-          </form>
-        )}
-        <p className="field-hint" style={{ marginTop: 14 }}>
-          <Link to="/login">Back to sign in</Link>
-        </p>
-      </Card>
-    </AuthShell>
+    <AuthLayout
+      title="Reset your password"
+      subtitle="We will email you a link if the address is registered."
+      footer={<Link to="/login">Back to sign in</Link>}
+    >
+      {sent ? (
+        <Notice kind="success">
+          If that address has an account, a reset link is on its way. The link is valid for one hour.
+        </Notice>
+      ) : (
+        <form className="form-grid" onSubmit={onSubmit}>
+          <ErrorNotice error={error} />
+          <label className="field">
+            <span className="field-label">Email address</span>
+            <input
+              type="email"
+              name="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <button className="button" type="submit" disabled={busy}>
+            {busy ? 'Sending…' : 'Send reset link'}
+          </button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }
 
@@ -227,50 +336,41 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <AuthShell>
-      <Card>
-        <CardHeader title="Choose a new password" />
-        {!token ? (
-          <Notice kind="error">This link is missing its token. Request a new reset email.</Notice>
-        ) : done ? (
-          <>
-            <Notice kind="success">
-              Your password has been changed and every existing session was signed out.
-            </Notice>
-            <p className="field-hint" style={{ marginTop: 14 }}>
-              <Link to="/login">Sign in with your new password</Link>
-            </p>
-          </>
-        ) : (
-          <form className="stack" onSubmit={onSubmit}>
-            <ErrorNotice error={error} />
-            <label className="field">
-              <span className="field-label">New password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={MIN_PASSWORD}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <span className="field-hint">At least {MIN_PASSWORD} characters.</span>
-            </label>
-            <button className="button" type="submit" disabled={busy || password.length < MIN_PASSWORD}>
-              {busy ? 'Saving…' : 'Change password'}
-            </button>
-          </form>
-        )}
-      </Card>
-    </AuthShell>
+    <AuthLayout title="Choose a new password">
+      {!token ? (
+        <Notice kind="error">This link is missing its token. Request a new reset email.</Notice>
+      ) : done ? (
+        <>
+          <Notice kind="success">Your password has been changed and every existing session was signed out.</Notice>
+          <p className="field-hint" style={{ marginTop: 14 }}>
+            <Link to="/login">Sign in with your new password</Link>
+          </p>
+        </>
+      ) : (
+        <form className="form-grid" onSubmit={onSubmit}>
+          <ErrorNotice error={error} />
+          <PasswordField
+            label="New password"
+            autoComplete="new-password"
+            value={password}
+            onChange={setPassword}
+            minLength={MIN_PASSWORD}
+            hint={`At least ${MIN_PASSWORD} characters.`}
+          />
+          <button className="button" type="submit" disabled={busy || password.length < MIN_PASSWORD}>
+            {busy ? 'Saving…' : 'Change password'}
+          </button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }
 
 export function VerifyEmailPage() {
   const [params] = useSearchParams();
   const auth = useAuth();
-  const token = params.get('token') ?? '';
   const refresh = auth.refresh;
+  const token = params.get('token') ?? '';
   const [state, setState] = useState<'pending' | 'ok' | 'failed'>('pending');
   const [error, setError] = useState<unknown>(null);
 
@@ -300,27 +400,24 @@ export function VerifyEmailPage() {
   }, [token, refresh]);
 
   return (
-    <AuthShell>
-      <Card>
-        <CardHeader title="Confirm your email address" />
-        {state === 'pending' ? <p>Checking your confirmation link…</p> : null}
-        {state === 'ok' ? (
-          <>
-            <Notice kind="success">Your email address is confirmed.</Notice>
-            <p className="field-hint" style={{ marginTop: 14 }}>
-              <Link to="/dashboard">Go to your projects</Link>
-            </p>
-          </>
-        ) : null}
-        {state === 'failed' ? (
-          <>
-            <ErrorNotice error={error} />
-            <p className="field-hint" style={{ marginTop: 14 }}>
-              Signed in? Open <Link to="/account">your account</Link> to send a fresh link.
-            </p>
-          </>
-        ) : null}
-      </Card>
-    </AuthShell>
+    <AuthLayout title="Confirm your email address">
+      {state === 'pending' ? <p className="muted">Checking your confirmation link…</p> : null}
+      {state === 'ok' ? (
+        <>
+          <Notice kind="success">Your email address is confirmed.</Notice>
+          <p className="field-hint" style={{ marginTop: 14 }}>
+            <Link to="/dashboard">Go to your dashboard</Link>
+          </p>
+        </>
+      ) : null}
+      {state === 'failed' ? (
+        <>
+          <ErrorNotice error={error} />
+          <p className="field-hint" style={{ marginTop: 14 }}>
+            Signed in? Open <Link to="/account">your account</Link> to send a fresh link.
+          </p>
+        </>
+      ) : null}
+    </AuthLayout>
   );
 }

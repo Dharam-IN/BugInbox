@@ -1,147 +1,261 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { resources } from '../api.ts';
-import { useAuth } from '../auth.tsx';
-import { Card, Empty, ErrorNotice, Loading, Notice, formatBytes, formatRelative } from '../components/ui.tsx';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { resources, type ProjectSummary } from '../api.ts';
+import { AppShell } from '../components/AppShell.tsx';
+import { ErrorNotice, Loading, formatDateTime, formatRelative } from '../components/ui.tsx';
+import { PlusIcon, ProjectsIcon } from '../components/icons.tsx';
 
-export function ProjectsPage() {
-  const query = useQuery({ queryKey: ['projects'], queryFn: resources.projects });
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
+  return `${words[0]![0]}${words[1]![0]}`.toUpperCase();
+}
 
+/** Strip the scheme so the website reads as a domain, keeping any port. */
+function websiteLabel(origin: string | null): string {
+  if (!origin) return 'No website configured';
+  try {
+    const url = new URL(origin);
+    return `${url.host}${url.protocol === 'http:' ? ' (http)' : ''}`;
+  } catch {
+    return origin;
+  }
+}
+
+function StateBadge({ status }: { status: ProjectSummary['status'] }) {
   return (
-    <div className="content">
-      <header className="page-header">
-        <div>
-          <h1>Projects</h1>
-          <p className="subtitle">One project per website you collect feedback for.</p>
-        </div>
-        <Link className="button" to="/projects/new">
-          New project
-        </Link>
-      </header>
-
-      {query.isLoading ? <Loading label="Loading projects" rows={3} /> : null}
-      {query.isError ? <ErrorNotice error={query.error} /> : null}
-
-      {query.data ? (
-        query.data.projects.length === 0 ? (
-          <Card>
-            <Empty
-              title="No projects yet"
-              action={
-                <Link className="button" to="/projects/new">
-                  Create your first project
-                </Link>
-              }
-            >
-              A project holds the widget settings and the reports for one website.
-            </Empty>
-          </Card>
-        ) : (
-          <div className="list">
-            {query.data.projects.map((project) => (
-              <Link key={project.id} className="list-item" to={`/projects/${project.id}/reports`}>
-                <div className="spread">
-                  <div>
-                    <h2>{project.name}</h2>
-                    <p className="meta">
-                      Created {formatRelative(project.createdAt)} · {project.reportCount} report
-                      {project.reportCount === 1 ? '' : 's'} · {formatBytes(project.storageBytes)} of screenshots
-                    </p>
-                  </div>
-                  <div className="row tight">
-                    {project.newReportCount > 0 ? (
-                      <span className="badge new">
-                        {project.newReportCount} new
-                      </span>
-                    ) : null}
-                    <span className={`badge ${project.status}`}>{project.status === 'active' ? 'Active' : 'Paused'}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )
-      ) : null}
-    </div>
+    <span
+      className={`badge ${status}`}
+      title={
+        status === 'active'
+          ? 'Accepting submissions. This does not confirm the script is installed.'
+          : 'Not accepting submissions. The server rejects new reports.'
+      }
+    >
+      {status === 'active' ? 'Active' : 'Paused'}
+    </span>
   );
 }
 
-export function NewProjectPage() {
-  const navigate = useNavigate();
-  const client = useQueryClient();
-  const { owner } = useAuth();
-  const [name, setName] = useState('');
-  const [origins, setOrigins] = useState('');
+function RowActions({ project }: { project: ProjectSummary }) {
+  return (
+    <>
+      <Link className="button secondary small" to={`/projects/${project.id}/reports`}>
+        View reports
+      </Link>
+      <Link className="button ghost small" to={`/projects/${project.id}/install`}>
+        Install
+      </Link>
+      <Link className="button ghost small" to={`/projects/${project.id}/settings`}>
+        Settings
+      </Link>
+    </>
+  );
+}
 
-  const mutation = useMutation({
-    mutationFn: () =>
-      resources.createProject(
-        name.trim(),
-        origins
-          .split(/[\n,]/)
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    onSuccess: async ({ project }) => {
-      await client.invalidateQueries({ queryKey: ['projects'] });
-      navigate(`/projects/${project.id}/install`);
-    },
-  });
+export function ProjectsPage() {
+  const [search, setSearch] = useState('');
+  const query = useQuery({ queryKey: ['projects'], queryFn: resources.projects });
 
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    mutation.mutate();
-  }
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const all = query.data?.projects ?? [];
+    if (term === '') return all;
+    return all.filter(
+      (project) =>
+        project.name.toLowerCase().includes(term) || (project.primaryOrigin ?? '').toLowerCase().includes(term),
+    );
+  }, [query.data, search]);
+
+  const total = query.data?.projects.length ?? 0;
 
   return (
-    <div className="content narrow">
-      <header className="page-header">
-        <div>
-          <h1>New project</h1>
-          <p className="subtitle">You can change everything later.</p>
+    <AppShell
+      header={{
+        title: 'Projects',
+        actions: (
+          <Link className="button" to="/projects/new">
+            <PlusIcon />
+            New project
+          </Link>
+        ),
+      }}
+    >
+      <div className="page-body">
+        <div className="page-intro">
+          <h2>Projects</h2>
+          <p>One project per website. Each has its own widget settings, allowed websites and inbox.</p>
         </div>
-      </header>
 
-      {owner && !owner.emailVerified ? (
-        <Notice kind="warning">
-          Confirm your email address before creating a project. Open <Link to="/account">your account</Link> to send a
-          fresh confirmation link.
-        </Notice>
-      ) : null}
+        {query.isLoading ? (
+          <div className="panel">
+            <div className="panel-body">
+              <Loading label="Loading projects" rows={4} />
+            </div>
+          </div>
+        ) : null}
 
-      <Card>
-        <form className="stack" onSubmit={onSubmit}>
-          <ErrorNotice error={mutation.error} />
-          <label className="field">
-            <span className="field-label">Project name</span>
-            <input
-              type="text"
-              required
-              maxLength={80}
-              value={name}
-              placeholder="Acme marketing site"
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span className="field-label">Allowed website origins</span>
-            <textarea
-              required
-              value={origins}
-              placeholder={'https://acme.example\nhttp://localhost:5173'}
-              onChange={(e) => setOrigins(e.target.value)}
-            />
-            <span className="field-hint">
-              One per line. Scheme, host and port only — no paths and no wildcards. Reports are only accepted from these
-              exact origins. Add your local development origin too, for example <code>http://localhost:5173</code>.
-            </span>
-          </label>
-          <button className="button" type="submit" disabled={mutation.isPending || !owner?.emailVerified}>
-            {mutation.isPending ? 'Creating…' : 'Create project'}
-          </button>
-        </form>
-      </Card>
-    </div>
+        {query.isError ? (
+          <div className="panel">
+            <div className="panel-body">
+              <ErrorNotice error={query.error} />
+              <button type="button" className="button secondary" style={{ marginTop: 12 }} onClick={() => void query.refetch()}>
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {query.data ? (
+          total === 0 ? (
+            <div className="panel">
+              <div className="empty-state">
+                <span className="icon" aria-hidden="true">
+                  <ProjectsIcon />
+                </span>
+                <h3>No projects yet</h3>
+                <p>
+                  A project holds the widget settings and the reports for one website. The setup walks you from naming
+                  it to a working snippet.
+                </p>
+                <Link className="button" to="/projects/new">
+                  Create your first project
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="toolbar">
+                <label className="visually-hidden" htmlFor="project-search">
+                  Search projects
+                </label>
+                <input
+                  id="project-search"
+                  className="search-input"
+                  type="search"
+                  placeholder="Search by name or website"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                <span className="muted" style={{ fontSize: 12.5 }}>
+                  {filtered.length} of {total} project{total === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {filtered.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <h3>No matching projects</h3>
+                    <p>Nothing matches “{search.trim()}”. Try a different name or website.</p>
+                    <button type="button" className="button secondary" onClick={() => setSearch('')}>
+                      Clear search
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Desktop: a scannable table. */}
+                  <div className="panel desktop-table">
+                    <div className="panel-body flush">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Project</th>
+                            <th scope="col">State</th>
+                            <th scope="col">New</th>
+                            <th scope="col">Latest report</th>
+                            <th scope="col">
+                              <span className="visually-hidden">Actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((project) => (
+                            <tr key={project.id}>
+                              <td>
+                                <div className="cell-primary">
+                                  <span className="avatar" aria-hidden="true">
+                                    {initials(project.name)}
+                                  </span>
+                                  <span className="truncate">
+                                    <Link className="name" to={`/projects/${project.id}/reports`}>
+                                      {project.name}
+                                    </Link>
+                                    <span className="sub truncate" style={{ display: 'block' }}>
+                                      {websiteLabel(project.primaryOrigin)}
+                                    </span>
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                <StateBadge status={project.status} />
+                              </td>
+                              <td className="numeric">
+                                {project.newReportCount > 0 ? (
+                                  <span className="badge new">{project.newReportCount}</span>
+                                ) : (
+                                  <span className="muted">0</span>
+                                )}
+                              </td>
+                              <td className="nowrap muted">
+                                {project.latestReportAt ? (
+                                  <time dateTime={project.latestReportAt} title={formatDateTime(project.latestReportAt)}>
+                                    {formatRelative(project.latestReportAt)}
+                                  </time>
+                                ) : (
+                                  'No reports yet'
+                                )}
+                              </td>
+                              <td className="actions">
+                                <RowActions project={project} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Mobile: the same information as compact cards. */}
+                  <div className="mobile-cards">
+                    {filtered.map((project) => (
+                      <div className="panel" key={project.id} style={{ marginBottom: 12 }}>
+                        <div className="panel-body" style={{ display: 'grid', gap: 12 }}>
+                          <div className="cell-primary">
+                            <span className="avatar" aria-hidden="true">
+                              {initials(project.name)}
+                            </span>
+                            <span className="truncate" style={{ flex: 1 }}>
+                              <Link className="name" to={`/projects/${project.id}/reports`}>
+                                {project.name}
+                              </Link>
+                              <span className="sub truncate" style={{ display: 'block' }}>
+                                {websiteLabel(project.primaryOrigin)}
+                              </span>
+                            </span>
+                            <StateBadge status={project.status} />
+                          </div>
+                          <div className="toolbar" style={{ fontSize: 12.5 }}>
+                            <span className="muted">
+                              {project.newReportCount} new ·{' '}
+                              {project.latestReportAt ? formatRelative(project.latestReportAt) : 'No reports yet'}
+                            </span>
+                          </div>
+                          <div className="toolbar">
+                            <RowActions project={project} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )
+        ) : null}
+      </div>
+    </AppShell>
   );
 }

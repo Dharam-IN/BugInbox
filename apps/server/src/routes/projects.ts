@@ -105,12 +105,25 @@ export default async function projectRoutes(app: FastifyInstance) {
   app.get('/', async (request) => {
     const session = app.requireOwner(request);
     const { rows } = await query<
-      ProjectRow & { report_count: number; new_report_count: number; storage_bytes: number }
+      ProjectRow & {
+        report_count: number;
+        new_report_count: number;
+        storage_bytes: number;
+        primary_origin: string | null;
+        latest_report_at: Date | null;
+      }
     >(
       `SELECT p.*,
               COALESCE(u.report_count, 0) AS report_count,
               COALESCE(u.storage_bytes, 0) AS storage_bytes,
-              (SELECT count(*) FROM reports r WHERE r.project_id = p.id AND r.status = 'new') AS new_report_count
+              (SELECT count(*) FROM reports r WHERE r.project_id = p.id AND r.status = 'new') AS new_report_count,
+              (SELECT max(r.created_at) FROM reports r WHERE r.project_id = p.id) AS latest_report_at,
+              -- The first origin the owner configured, used as the project's
+              -- primary website in the list. Ordering is stable by insertion.
+              (SELECT o.origin FROM project_origins o
+                WHERE o.project_id = p.id
+                ORDER BY o.created_at, o.origin
+                LIMIT 1) AS primary_origin
          FROM projects p
          LEFT JOIN project_usage u ON u.project_id = p.id
         WHERE p.owner_id = $1
@@ -127,6 +140,8 @@ export default async function projectRoutes(app: FastifyInstance) {
         reportCount: Number(row.report_count),
         newReportCount: Number(row.new_report_count),
         storageBytes: Number(row.storage_bytes),
+        primaryOrigin: row.primary_origin,
+        latestReportAt: row.latest_report_at ? row.latest_report_at.toISOString() : null,
       })),
     };
   });

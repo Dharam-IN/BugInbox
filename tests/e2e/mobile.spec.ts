@@ -6,19 +6,20 @@ test.describe.configure({ mode: 'serial' });
 test('the dashboard and the widget work at phone width', async ({ page, context }) => {
   const email = uniqueEmail('mobile');
   await signUpAndVerify(page, email);
-  const projectKey = await createProject(page, 'Mobile Website', [FIXTURE]);
+  const project = await createProject(page, 'Mobile Website', [FIXTURE]);
+  const projectKey = project.key;
 
   await test.step('the dashboard lays out without horizontal scrolling', async () => {
     await page.goto(`${WEB}/dashboard`);
-    await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
-    expect(overflow, 'no horizontal page scroll on the projects list').toBeLessThanOrEqual(1);
+    expect(overflow, 'no horizontal page scroll on the overview').toBeLessThanOrEqual(1);
 
-    await page.getByRole('link', { name: 'Mobile Website' }).click();
-    await expect(page.getByRole('link', { name: 'Widget settings' })).toBeVisible();
+    await page.goto(`${WEB}/projects/${project.id}/settings`);
+    await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
   });
 
   const reporterContext = await context.browser()!.newContext({
@@ -49,7 +50,7 @@ test('the dashboard and the widget work at phone width', async ({ page, context 
   });
 
   await test.step('turning mobile visibility off hides the widget on phones', async () => {
-    await page.getByRole('link', { name: 'Widget settings' }).click();
+    await page.goto(`${WEB}/projects/${project.id}/settings`);
     await page.getByLabel('Show on mobile').uncheck();
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.getByText('Saved')).toBeVisible();

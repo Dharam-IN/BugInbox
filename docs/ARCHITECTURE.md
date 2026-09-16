@@ -187,6 +187,45 @@ form closes. Submission is re-checked at send time as well, and when a page URL
 is collected the server re-evaluates the rules and rejects reports from excluded
 pages.
 
+## Overview aggregates
+
+`GET /api/v1/stats/overview?projectId=&days=7|30` is the only endpoint the
+dashboard's overview uses. Everything it returns is a SQL aggregate over the
+owner's reports (`apps/server/src/routes/stats.ts`); nothing is derived from a
+page of rows.
+
+**Definitions, repeated verbatim in the interface.** The *cohort* is every
+retained report created inside the selected range, in the selected project
+scope.
+
+| Figure | Meaning |
+| --- | --- |
+| Reports received | The size of the cohort |
+| New / In progress / Resolved | The **current** status of that same cohort |
+| Daily chart | Cohort grouped by UTC calendar day, zero-filled |
+| Lifetime | All stored reports and projects for the owner, ignoring the range |
+
+The three status figures partition the cohort exactly, so the cards and the
+chart always agree. They are *not* "resolved during this period": there is no
+status history table, so that number cannot be produced honestly and is neither
+shown nor implied.
+
+**Boundaries.** Days are UTC calendar days, and the timezone is displayed in the
+interface. A range of N days covers the last N days *including today*:
+`date_trunc('day', now() AT TIME ZONE 'UTC') - (N - 1 days)` up to now. The
+range start is one SQL expression shared by every query in the handler, so the
+cards, the chart and the recent list cannot disagree.
+
+**Limits.** Deleted reports and reports removed by the 90-day retention sweep
+are simply absent, so a range longer than the retention window would
+under-report — which is why only 7 and 30 days are offered. Owner scoping is in
+each query's `WHERE` clause, and a `projectId` that the owner does not own is a
+404 rather than an empty chart. Status changes and deletions invalidate the
+overview query, so the figures refresh without a reload.
+
+No percentage growth, response time, visitor or conversion metric is produced,
+because none of them can be computed from what is stored.
+
 ## Public site and interface theme
 
 The public homepage and the owner dashboard are the same React bundle and the

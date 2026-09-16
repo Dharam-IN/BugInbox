@@ -74,6 +74,31 @@ export interface ProjectSummary {
   reportCount: number;
   newReportCount: number;
   storageBytes: number;
+  /** First configured origin, shown as the project's primary website. */
+  primaryOrigin: string | null;
+  latestReportAt: string | null;
+}
+
+export type RangeDays = 7 | 30;
+
+export interface OverviewStats {
+  range: { days: RangeDays; from: string | null; to: string | null; timezone: string };
+  projectId: string | null;
+  /** Reports created in the range; the status figures are the cohort's CURRENT status. */
+  totals: { received: number; new: number; inProgress: number; resolved: number };
+  daily: Array<{ date: string; count: number }>;
+  lifetime: { reports: number; projects: number };
+  recent: Array<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    status: ReportStatus;
+    excerpt: string;
+    pageUrl: string | null;
+    pageContext: string | null;
+    hasScreenshot: boolean;
+    createdAt: string;
+  }>;
 }
 
 export interface ProjectAppearance {
@@ -152,6 +177,11 @@ export const resources = {
     api.post<{ ok: true }>('/auth/change-password', { currentPassword, newPassword }),
 
   projects: () => api.get<{ projects: ProjectSummary[] }>('/projects'),
+  overview: (params: { projectId?: string; days: RangeDays }) => {
+    const query = new URLSearchParams({ days: String(params.days) });
+    if (params.projectId) query.set('projectId', params.projectId);
+    return api.get<OverviewStats>(`/stats/overview?${query.toString()}`);
+  },
   project: (id: string) => api.get<{ project: Project }>(`/projects/${id}`),
   createProject: (name: string, origins: string[]) => api.post<{ project: Project }>('/projects', { name, origins }),
   updateProject: (id: string, patch: Record<string, unknown>) =>

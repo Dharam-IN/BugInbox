@@ -1,7 +1,7 @@
 # Project status
 
 _Last updated: 2026-09-16. V1 is complete and verified locally, plus a public
-website and a full light/dark theme._
+website, a full light/dark theme and an interface redesign._
 
 ## Current state
 
@@ -10,8 +10,10 @@ the complete report flow, the owner dashboard and widget controls, screenshots
 and recoverable notifications, hardening plus tests plus containerisation, and
 documentation.
 
-Two additions have since been implemented and verified: a light/dark/system
-theme across the whole product, and a public homepage at `/`.
+Three additions have since been implemented and verified: a light/dark/system
+theme across the whole product, a public homepage at `/`, and an interface
+redesign that replaced the centred-column screens with a proper application
+shell, a real overview, a guided project setup and a structured inbox.
 
 Nothing has been pushed to any remote, nothing has been deployed, and no email
 has left the machine — Mailpit is the only mail destination.
@@ -28,9 +30,9 @@ unrelated weather app from the repository template and has not been touched.
 | --- | --- | --- |
 | `/` | public | Public homepage (also available signed in) |
 | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email` | public | Authentication |
-| `/dashboard` | protected | Projects list (this used to be `/`) |
-| `/projects` | protected | Redirects to `/dashboard` |
-| `/projects/new` | protected | Create a project |
+| `/dashboard` | protected | Overview: summary cards, charts, recent reports |
+| `/projects` | protected | Projects list: table on desktop, cards on mobile |
+| `/projects/new` | protected | Guided setup: Website → Appearance → Install |
 | `/projects/:id/{reports,install,settings}` | protected | Project sections |
 | `/projects/:id/reports/:reportId`, `/reports`, `/reports/:id` | protected | Reports |
 | `/account` | protected | Account settings |
@@ -38,6 +40,29 @@ unrelated weather app from the repository template and has not been touched.
 
 Protected paths redirect a signed-out visitor to `/login`. Emailed verification,
 reset and report links were not changed and still work.
+
+## Overview metric definitions
+
+One endpoint, `GET /api/v1/stats/overview?projectId=&days=7|30`, backed by SQL
+aggregates with owner scoping in every query.
+
+- The **cohort** is every retained report created in the selected range, in the
+  selected project scope.
+- **Reports received** is the size of that cohort.
+- **New / In progress / Resolved** are the cohort's *current* status. They
+  partition it exactly, so cards and chart always agree. They are not "resolved
+  during this period" — there is no status history table, so that figure cannot
+  be produced honestly and is neither shown nor implied. The interface says so
+  in plain text under the cards.
+- Days are **UTC** calendar days, displayed in the interface. A range of N days
+  covers the last N days including today.
+- Deleted and retention-expired reports are absent, which is why only 7 and 30
+  day ranges are offered — a longer range than the 90 day retention window would
+  under-report.
+- A `projectId` the owner does not own returns 404, not an empty chart.
+- Status changes and deletions invalidate the overview, so figures refresh.
+- No growth percentage, response time, visitor or conversion metric exists,
+  because none can be computed from what is stored.
 
 ## Theme behaviour and storage
 
@@ -124,8 +149,8 @@ Run on 2026-09-16 against the Compose stack, from the repository root with
 | Lint | `npx eslint .` | passed, 0 problems |
 | Types | `npm run typecheck` | passed (shared, widget, server, dashboard) |
 | Build | `npm run build` | passed; widget 27.9 KiB minified, dashboard 373 KiB |
-| API and integration tests | `npm test` | **64 passed**, 6 files |
-| Browser verification | `npm run test:e2e` | **15 passed** (13 desktop, 2 mobile) |
+| API and integration tests | `npm test` | **77 passed**, 7 files |
+| Browser verification | `npm run test:e2e` | **21 passed** (19 desktop, 2 mobile) |
 | Images | `docker compose build` | api, worker and web built |
 | Health | `GET /api/health/ready` | `{"status":"ok","checks":{"database":true,"redis":true}}` |
 
@@ -170,6 +195,27 @@ project's saved widget theme untouched and vice versa; keyboard operation with a
 skip link, arrow-key theme selection and a visible focus ring; and the
 phone-width homepage with its menu, Escape handling and no horizontal overflow.
 
+The redesign added `apps/server/src/tests/stats.test.ts` (13 tests) asserting the
+aggregates against fixtures inserted at known UTC day offsets: cohort counts by
+current status, cards agreeing with the chart total, zero-filled days, the
+inclusive boundary day and the day just outside it, project filtering, a status
+change and a deletion both moving the figures, cross-owner isolation with a 404
+for someone else's project id, rejection of unsupported ranges and malformed
+ids, a truthful zero state, and "nothing ever" distinguished from "nothing in
+this window". It also asserts cursor pagination reaches all 60 of a seeded set
+with no duplicates, and that the projects list exposes the primary website and
+latest report time.
+
+`tests/e2e/dashboard.spec.ts` (6 tests) covers the redesigned screens: the empty
+overview showing zeroes and an onboarding action; the guided setup refusing to
+continue without a name or website, explaining what a bare domain and a full
+page URL become, rejecting ftp/wildcard/credential input, creating exactly one
+project, saving exactly the origin that was shown, and leaving installation
+reachable afterwards; overview figures matching the reports and moving when a
+report is resolved; the inbox loading 25, 50 then 60 distinct reports and its
+status tabs surviving a reload; project search with a distinct no-results state;
+and the report detail screenshot enlarging and closing with Escape.
+
 Manually verified in addition:
 
 - **Restart persistence.** `docker compose restart`, then report, attachment and
@@ -178,6 +224,14 @@ Manually verified in addition:
   disposable marker report: after the restore the marker was gone and the counts
   matched the backup (14 reports, 5 attachments, 5 files on disk), with health
   back to `ok`.
+- **Redesign screenshots.** Login, overview, projects, guided setup, inbox and
+  report detail were rendered and inspected at 1440px and 390px in both themes,
+  plus the mobile drawer. No horizontal overflow at either width, and zero
+  console errors on any screen. Inspecting these caught three real defects that
+  were then fixed: the daily chart rendered every empty day as a tall block
+  because flex overrode the bar height, the status breakdown fill was invisible
+  because its track was an inline span, and the overview's recent list had an
+  empty fourth column.
 - **Theme inspection of rendered pages.** Sign-in, projects, report detail,
   project settings, the delete-confirmation flow and the install page were
   rendered and inspected at 1280 px in both Light and Dark, plus the homepage in
@@ -231,8 +285,12 @@ Manually verified in addition:
   inspected. Such apps should use manual trigger mode plus the host API.
 - Screenshots live on a local Docker volume, so backups must cover the volume as
   well as the database.
-- The inbox shows the 50 most recent reports per filter; there is no older-page
-  control yet, though the API returns a cursor.
+- The overview offers 7 and 30 day ranges only, because the default retention
+  window is 90 days and anything longer would quietly under-report.
+- There is no status history, so trends such as "resolved this week" cannot be
+  shown and deliberately are not.
+- The install step's check confirms that a report reached the server. It does
+  not check the host site's layout, CSP or security, and says so.
 - Rate limiting falls back to per-process in-memory counters when Redis is down,
   which is less precise across multiple API processes.
 
@@ -259,6 +317,7 @@ Branch `main`. Commits, all authored and committed as
 - `7444d74` — parameterised compose so a second isolated stack can run, and the
   fresh-setup fixes it uncovered
 - `ca43303` — light/dark/system theme and the public homepage
+- `7da462d` — recorded that commit's hash in this document
 
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { resources } from '../api.ts';
 import { useAuth } from '../auth.tsx';
 import { Card, CardHeader, ErrorNotice, Notice } from '../components/ui.tsx';
+import { AppShell } from '../components/AppShell.tsx';
 
 const MIN_PASSWORD = 12;
 
@@ -32,13 +33,12 @@ export function AccountPage() {
   }
 
   return (
-    <div className="content narrow">
-      <header className="page-header">
-        <div>
-          <h1>Your account</h1>
-          <p className="subtitle">{owner?.email}</p>
+    <AppShell header={{ title: 'Account' }}>
+      <div className="page-body narrow">
+        <div className="page-intro">
+          <h2>Your account</h2>
+          <p>{owner?.email}</p>
         </div>
-      </header>
 
       <Card>
         <CardHeader title="Email address" />
@@ -99,6 +99,7 @@ export function AccountPage() {
           Sign out of this browser
         </button>
       </Card>
-    </div>
+      </div>
+    </AppShell>
   );
 }

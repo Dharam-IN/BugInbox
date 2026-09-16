@@ -40,7 +40,8 @@ Everything binds to loopback only:
 | Service | URL |
 | --- | --- |
 | Public website | http://localhost:58080/ |
-| Owner dashboard | http://localhost:58080/dashboard |
+| Dashboard overview | http://localhost:58080/dashboard |
+| Projects | http://localhost:58080/projects |
 | API and widget script | http://localhost:58080 |
 | Integration fixture website | http://localhost:58081 |
 | Mailpit — every email BugInbox sends locally | http://localhost:58025 |
@@ -54,8 +55,9 @@ Stop with `npm run down` (data is kept) and follow logs with `npm run logs`.
 1. `npm run seed` prints a demo owner, password and project key. They are
    synthetic and `.test`-only; do not reuse them anywhere.
 2. Open http://localhost:58080 for the public homepage, then sign in at
-   http://localhost:58080/login with the printed credentials. The dashboard is
-   at http://localhost:58080/dashboard.
+   http://localhost:58080/login with the printed credentials. The overview is at
+   http://localhost:58080/dashboard and your projects at
+   http://localhost:58080/projects.
 3. Open the fixture website once with the project key so it remembers it:
    `http://localhost:58081/?key=<the printed project key>`
 4. The launcher appears in the corner. Send a report, with or without an image.
@@ -163,8 +165,8 @@ source scripts/host-env.sh   # points host tooling at the published loopback por
 
 npm run lint
 npm run typecheck
-npm test                     # 64 API and integration tests (vitest)
-npm run test:e2e             # 15 browser journeys (Playwright, real Chromium)
+npm test                     # 77 API and integration tests (vitest)
+npm run test:e2e             # 21 browser journeys (Playwright, real Chromium)
 ```
 
 `npm test` uses a separate `buginbox_test` database, created on first run, so it

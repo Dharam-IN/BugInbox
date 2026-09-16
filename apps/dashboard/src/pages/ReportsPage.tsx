@@ -1,281 +1,277 @@
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { resources, type ReportStatus } from '../api.ts';
-import {
-  Card,
-  CardHeader,
-  Empty,
-  ErrorNotice,
-  Loading,
-  Notice,
-  Segmented,
-  StatusBadge,
-  formatDateTime,
-  formatRelative,
-} from '../components/ui.tsx';
+import { AppShell } from '../components/AppShell.tsx';
+import { ErrorNotice, Loading, StatusBadge, formatDateTime, formatRelative } from '../components/ui.tsx';
+import { ImageIcon, InboxIcon } from '../components/icons.tsx';
+import { ProjectTabs, useProjectContext } from './ProjectLayout.tsx';
 
 type Filter = 'all' | ReportStatus;
 
-export function ReportsPage({ scope }: { scope: 'project' | 'all' }) {
-  const { projectId } = useParams();
-  const [filter, setFilter] = useState<Filter>('all');
+const TABS: Array<{ value: Filter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'new', label: 'New' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'resolved', label: 'Resolved' },
+];
 
-  const listQuery = useQuery({
-    queryKey: ['reports', projectId ?? 'all', filter],
-    queryFn: () =>
-      resources.reports({
-        projectId: scope === 'project' ? projectId : undefined,
-        status: filter === 'all' ? undefined : filter,
-        limit: 50,
-      }),
-  });
+const PAGE_SIZE = 25;
 
-  const countsQuery = useQuery({
-    queryKey: ['report-counts', projectId ?? 'all'],
-    queryFn: () => resources.reportCounts(scope === 'project' ? projectId : undefined),
-  });
-
-  const counts = countsQuery.data?.counts;
-
-  const body = (
-    <>
-      <div className="filters">
-        <Segmented
-          label="Filter by status"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: counts ? `All (${counts.total})` : 'All' },
-            { value: 'new', label: counts ? `New (${counts.new})` : 'New' },
-            { value: 'in_progress', label: counts ? `In progress (${counts.in_progress})` : 'In progress' },
-            { value: 'resolved', label: counts ? `Resolved (${counts.resolved})` : 'Resolved' },
-          ]}
-        />
-      </div>
-
-      {listQuery.isLoading ? <Loading label="Loading reports" rows={4} /> : null}
-      {listQuery.isError ? <ErrorNotice error={listQuery.error} /> : null}
-
-      {listQuery.data ? (
-        listQuery.data.reports.length === 0 ? (
-          <Card>
-            <Empty title={filter === 'all' ? 'No reports yet' : 'Nothing with that status'}>
-              {filter === 'all'
-                ? 'Reports appear here as soon as someone submits one from your website.'
-                : 'Try a different status filter.'}
-            </Empty>
-          </Card>
-        ) : (
-          <div className="list">
-            {listQuery.data.reports.map((report) => (
-              <Link key={report.id} className="list-item" to={`/reports/${report.id}`}>
-                <div className="spread" style={{ alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 560 }}>{report.excerpt}</p>
-                    <p className="meta">
-                      {scope === 'all' ? `${report.projectName} · ` : ''}
-                      {formatRelative(report.createdAt)}
-                      {report.pageContext ? ` · ${report.pageContext}` : report.pageUrl ? ` · ${report.pageUrl}` : ''}
-                      {report.hasScreenshot ? ' · screenshot' : ''}
-                      {report.reporterEmail ? ' · contact given' : ''}
-                    </p>
-                  </div>
-                  <StatusBadge status={report.status} />
-                </div>
-              </Link>
-            ))}
-          </div>
-        )
-      ) : null}
-
-      {listQuery.data?.nextBefore ? (
-        <p className="field-hint" style={{ marginTop: 12 }}>
-          Showing the 50 most recent reports for this filter.
-        </p>
-      ) : null}
-    </>
-  );
-
-  if (scope === 'project') return <div className="stack">{body}</div>;
-
-  return (
-    <div className="content">
-      <header className="page-header">
-        <div>
-          <h1>All reports</h1>
-          <p className="subtitle">Everything from every project you own.</p>
-        </div>
-      </header>
-      {body}
-    </div>
-  );
+/** Shorten a page URL for the list, keeping the host and the path. */
+function pageLabel(url: string | null, context: string | null): string | null {
+  if (context) return context;
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}`;
+  } catch {
+    return url;
+  }
 }
 
-export function ReportDetailPage() {
-  const { reportId = '' } = useParams();
-  const navigate = useNavigate();
-  const client = useQueryClient();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const query = useQuery({ queryKey: ['report', reportId], queryFn: () => resources.report(reportId) });
-
-  const setStatus = useMutation({
-    mutationFn: (status: ReportStatus) => resources.setReportStatus(reportId, status),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ['report', reportId] });
-      await client.invalidateQueries({ queryKey: ['reports'] });
-      await client.invalidateQueries({ queryKey: ['report-counts'] });
-    },
+function ReportRows({ projectId, status, showProject }: { projectId?: string; status?: ReportStatus; showProject: boolean }) {
+  const query = useInfiniteQuery({
+    queryKey: ['reports', projectId ?? 'all', status ?? 'all'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => resources.reports({ projectId, status, before: pageParam, limit: PAGE_SIZE }),
+    getNextPageParam: (lastPage) => lastPage.nextBefore ?? undefined,
   });
 
-  const remove = useMutation({
-    mutationFn: () => resources.deleteReport(reportId),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ['reports'] });
-      await client.invalidateQueries({ queryKey: ['report-counts'] });
-      await client.invalidateQueries({ queryKey: ['projects'] });
-      navigate(-1);
-    },
-  });
+  const reports = useMemo(() => query.data?.pages.flatMap((page) => page.reports) ?? [], [query.data]);
 
   if (query.isLoading) {
     return (
-      <div className="content">
-        <Loading label="Loading report" rows={5} />
-      </div>
-    );
-  }
-  if (query.isError || !query.data) {
-    return (
-      <div className="content">
-        <ErrorNotice error={query.error ?? new Error('That report could not be loaded.')} />
+      <div className="panel-body">
+        <Loading label="Loading reports" rows={5} />
       </div>
     );
   }
 
-  const report = query.data.report;
-  const browser = report.browser ?? {};
+  if (query.isError) {
+    return (
+      <div className="panel-body">
+        <ErrorNotice error={query.error} />
+        <button type="button" className="button secondary" style={{ marginTop: 12 }} onClick={() => void query.refetch()}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (reports.length === 0) {
+    return (
+      <div className="empty-state">
+        <span className="icon" aria-hidden="true">
+          <InboxIcon />
+        </span>
+        {status ? (
+          <>
+            <h3>No matching reports</h3>
+            <p>Nothing here has that status right now. Try another tab.</p>
+          </>
+        ) : (
+          <>
+            <h3>No reports yet</h3>
+            <p>Reports appear here as soon as someone sends one from your website.</p>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="content">
-      <header className="page-header">
-        <div>
-          <h1>Report</h1>
-          <p className="subtitle">
-            <Link to={`/projects/${report.projectId}/reports`}>{report.projectName}</Link> ·{' '}
-            {formatDateTime(report.createdAt)}
-          </p>
-        </div>
-        <div className="row tight">
-          <StatusBadge status={report.status} />
-        </div>
-      </header>
+    <>
+      <div className="report-list">
+        {reports.map((report) => {
+          const page = pageLabel(report.pageUrl, report.pageContext);
+          return (
+            <Link key={report.id} className="report-row" to={`/reports/${report.id}`}>
+              <div style={{ minWidth: 0 }}>
+                <div className="message truncate">{report.excerpt}</div>
+                <div className="meta">
+                  {showProject ? <span>{report.projectName}</span> : null}
+                  {page ? <span className="truncate">{page}</span> : <span>Page not collected</span>}
+                  {report.reporterEmail ? <span>Contact given</span> : null}
+                </div>
+              </div>
 
-      <Card>
-        <CardHeader title="What the reporter said" />
-        <p className="report-body">{report.message}</p>
-      </Card>
+              <div className="col">
+                <span className="col-label">Attachment</span>
+                {report.hasScreenshot ? (
+                  <span className="attach-chip">
+                    <ImageIcon />
+                    Screenshot
+                  </span>
+                ) : (
+                  <span className="muted" style={{ fontSize: 12.5 }}>
+                    —
+                  </span>
+                )}
+              </div>
 
-      <Card>
-        <CardHeader title="Status" />
-        <ErrorNotice error={setStatus.error} />
-        <Segmented
-          label="Report status"
-          value={report.status}
-          onChange={(status) => setStatus.mutate(status)}
-          options={[
-            { value: 'new', label: 'New' },
-            { value: 'in_progress', label: 'In progress' },
-            { value: 'resolved', label: 'Resolved' },
-          ]}
-        />
-      </Card>
+              <div className="col nowrap muted" style={{ fontSize: 12.5 }}>
+                <span className="col-label">Received</span>
+                <time dateTime={report.createdAt} title={formatDateTime(report.createdAt)}>
+                  {formatRelative(report.createdAt)}
+                </time>
+              </div>
 
-      {report.hasScreenshot ? (
-        <Card>
-          <CardHeader title="Screenshot" subtitle="Uploaded by the reporter. Only you can open this file." />
-          <img className="screenshot" src={resources.screenshotUrl(report.id)} alt="Screenshot attached by the reporter" />
-        </Card>
-      ) : null}
+              <div className="col status-col">
+                <StatusBadge status={report.status} />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
 
-      <Card>
-        <CardHeader title="Context" subtitle="Everything BugInbox collected, and nothing else." />
-        <dl className="definition">
-          <dt>Contact email</dt>
-          <dd>
-            {report.reporterEmail ? (
-              <a href={`mailto:${report.reporterEmail}`}>{report.reporterEmail}</a>
-            ) : (
-              <span className="field-hint">Not provided</span>
-            )}
-          </dd>
-
-          <dt>Page</dt>
-          <dd>
-            {report.pageUrl ? (
-              <span className="mono">{report.pageUrl}</span>
-            ) : (
-              <span className="field-hint">Not collected</span>
-            )}
-          </dd>
-
-          <dt>Page context</dt>
-          <dd>{report.pageContext ?? <span className="field-hint">Not provided by the website</span>}</dd>
-
-          <dt>Received</dt>
-          <dd>{formatDateTime(report.createdAt)}</dd>
-
-          <dt>Deleted on</dt>
-          <dd>{formatDateTime(report.expiresAt)}</dd>
-
-          <dt>Device</dt>
-          <dd>{browser.device ?? <span className="field-hint">Unknown</span>}</dd>
-
-          <dt>Viewport</dt>
-          <dd>
-            {browser.viewportWidth && browser.viewportHeight ? (
-              `${browser.viewportWidth} × ${browser.viewportHeight}${browser.devicePixelRatio ? ` at ${browser.devicePixelRatio}×` : ''}`
-            ) : (
-              <span className="field-hint">Unknown</span>
-            )}
-          </dd>
-
-          <dt>Language</dt>
-          <dd>{browser.language ?? <span className="field-hint">Unknown</span>}</dd>
-
-          <dt>Time zone</dt>
-          <dd>{browser.timezone ?? <span className="field-hint">Unknown</span>}</dd>
-
-          <dt>Browser</dt>
-          <dd style={{ wordBreak: 'break-word' }}>{browser.userAgent ?? <span className="field-hint">Unknown</span>}</dd>
-        </dl>
-      </Card>
-
-      <Card className="danger-zone">
-        <CardHeader title="Delete this report" subtitle="Removes the report and any screenshot immediately." />
-        <ErrorNotice error={remove.error} />
-        {confirmDelete ? (
-          <div className="row">
-            <button className="button danger" type="button" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              {remove.isPending ? 'Deleting…' : 'Yes, delete it'}
-            </button>
-            <button className="button ghost" type="button" onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button className="button danger" type="button" onClick={() => setConfirmDelete(true)}>
-            Delete report…
+      <div className="panel-body" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="muted" style={{ fontSize: 12.5 }}>
+          Showing {reports.length} report{reports.length === 1 ? '' : 's'}
+        </span>
+        <span style={{ marginLeft: 'auto' }} />
+        {query.hasNextPage ? (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => void query.fetchNextPage()}
+            disabled={query.isFetchingNextPage}
+          >
+            {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
           </button>
+        ) : (
+          <span className="muted" style={{ fontSize: 12.5 }}>
+            End of the list
+          </span>
         )}
-      </Card>
+      </div>
+    </>
+  );
+}
 
-      {report.status === 'resolved' ? (
-        <Notice kind="info">
-          Resolved reports stay here until the retention window ends, then they are deleted automatically.
-        </Notice>
-      ) : null}
-    </div>
+export function ReportsPage({ scope }: { scope: 'project' | 'all' }) {
+  const { projectId } = useParams();
+  // Filters live in the URL, so Back returns to the tab you were on and links
+  // can be shared.
+  const [params, setParams] = useSearchParams();
+
+  const filter = (params.get('status') as Filter | null) ?? 'all';
+  const projectFilter = scope === 'project' ? projectId : (params.get('projectId') ?? '') || undefined;
+
+  const projects = useQuery({ queryKey: ['projects'], queryFn: resources.projects, enabled: scope === 'all' });
+  const counts = useQuery({
+    queryKey: ['report-counts', projectFilter ?? 'all'],
+    queryFn: () => resources.reportCounts(projectFilter),
+  });
+
+  const countFor = (value: Filter): number | null => {
+    if (!counts.data) return null;
+    if (value === 'all') return counts.data.counts.total;
+    return counts.data.counts[value];
+  };
+
+  function setParam(key: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value === '' || value === 'all') next.delete(key);
+    else next.set(key, value);
+    setParams(next, { replace: true });
+  }
+
+  const body = (
+    <>
+      <div className="toolbar">
+        {scope === 'all' ? (
+          <>
+            <label className="visually-hidden" htmlFor="inbox-project">
+              Filter by project
+            </label>
+            <select
+              id="inbox-project"
+              className="inline-select"
+              value={params.get('projectId') ?? ''}
+              onChange={(event) => setParam('projectId', event.target.value)}
+            >
+              <option value="">All projects</option>
+              {projects.data?.projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
+      </div>
+
+      <div className="panel">
+        <div className="tabs" role="tablist" aria-label="Filter by status">
+          {TABS.map((tab) => {
+            const count = countFor(tab.value);
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={filter === tab.value}
+                className="tab"
+                onClick={() => setParam('status', tab.value)}
+              >
+                {tab.label}
+                {count !== null ? <span className="count">{count}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <ReportRows
+          key={`${projectFilter ?? 'all'}-${filter}`}
+          projectId={projectFilter}
+          status={filter === 'all' ? undefined : filter}
+          showProject={scope === 'all'}
+        />
+      </div>
+
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Counts describe every stored report in this scope, not just the ones loaded below. Reports are removed
+        automatically once they pass their project&apos;s retention window.
+      </p>
+    </>
+  );
+
+  if (scope === 'project') {
+    return <ProjectScopedReports>{body}</ProjectScopedReports>;
+  }
+
+  return (
+    <AppShell header={{ title: 'All reports' }}>
+      <div className="page-body">
+        <div className="page-intro">
+          <h2>All reports</h2>
+          <p>Everything from every project you own, newest first.</p>
+        </div>
+        {body}
+      </div>
+    </AppShell>
+  );
+}
+
+function ProjectScopedReports({ children }: { children: React.ReactNode }) {
+  const project = useProjectContext();
+  return (
+    <AppShell
+      header={{
+        title: project.name,
+        breadcrumbs: [{ label: 'Projects', to: '/projects' }, { label: project.name }],
+        actions: (
+          <Link className="button secondary small" to={`/projects/${project.id}/install`}>
+            Install
+          </Link>
+        ),
+      }}
+    >
+      <div className="page-body">
+        <ProjectTabs project={project} />
+        {children}
+      </div>
+    </AppShell>
   );
 }

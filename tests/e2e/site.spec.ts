@@ -90,11 +90,12 @@ test('a signed-in visitor gets the dashboard entry point from the homepage', asy
 
   await page.getByRole('link', { name: 'Open dashboard' }).first().click();
   await expect(page).toHaveURL(`${WEB}/dashboard`);
-  await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 
-  // The old entry point still works for anyone with it bookmarked.
-  await page.goto(`${WEB}/projects`);
-  await expect(page).toHaveURL(`${WEB}/dashboard`);
+  // Projects now has its own route, reachable from the sidebar.
+  await page.getByRole('link', { name: 'Projects', exact: true }).click();
+  await expect(page).toHaveURL(`${WEB}/projects`);
+  await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
 });
 
 test('theme selection applies, persists and survives sign-out and sign-in', async ({ page }) => {
@@ -124,6 +125,7 @@ test('theme selection applies, persists and survives sign-out and sign-in', asyn
   });
 
   await test.step('it survives signing out and back in', async () => {
+    await page.goto(`${WEB}/account`);
     await page.getByRole('button', { name: 'Sign out of this browser' }).click();
     await expect(page).toHaveURL(/\/login$/);
     expect(await themeOf(page)).toBe('dark');
@@ -131,7 +133,7 @@ test('theme selection applies, persists and survives sign-out and sign-in', asyn
     await page.getByLabel('Email address').fill(email);
     await page.getByLabel('Password').fill(PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
     expect(await themeOf(page)).toBe('dark');
   });
 
@@ -202,9 +204,8 @@ test('the saved theme is applied before the application renders', async ({ page 
 test('changing the interface theme never changes a project widget setting', async ({ page }) => {
   const email = uniqueEmail('site-independence');
   await signUpAndVerify(page, email);
-  await createProject(page, 'Theme Independence Site', ['https://independence.test']);
-
-  const projectId = (await page.url().match(/projects\/([0-9a-f-]{36})/)?.[1]) ?? '';
+  const created = await createProject(page, 'Theme Independence Site', ['https://independence.test']);
+  const projectId = created.id;
   expect(projectId).not.toBe('');
 
   const widgetTheme = () =>

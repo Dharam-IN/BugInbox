@@ -6,6 +6,7 @@ import { App } from './App.tsx';
 import { AuthProvider } from './auth.tsx';
 import { ThemeProvider } from './theme.tsx';
 import './styles.css';
+import './app.css';
 import './site.css';
 
 const client = new QueryClient({

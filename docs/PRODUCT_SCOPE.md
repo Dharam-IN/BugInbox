@@ -31,11 +31,12 @@ because none of those have been established.
 | --- | --- |
 | Owner accounts | Signup, login, logout, email verification, password reset, password change |
 | Projects | Multiple projects per owner, create/edit/pause/resume/delete |
-| Installation | Public project key, script snippet, custom-button example, allowed origins |
+| Installation | Guided three-stage setup, public project key, script snippet, custom-button example, allowed origins |
 | Widget | Embeddable bundle, Shadow DOM isolation, accessible form, optional screenshot |
 | Widget controls | Launcher on/off, text, accent colour, theme, preset icon, corner, offsets, mobile visibility and offsets, include/exclude path rules, immediate/delay/manual trigger |
 | Preview and testing | Live appearance preview and a sample URL/device eligibility tester |
-| Reports | Inbox filtered by project and status, detail view, status changes, deletion |
+| Overview | Summary cards, daily chart and status breakdown over a 7 or 30 day range, scoped to all projects or one |
+| Reports | Inbox filtered by project and status with pagination, detail view, status changes, deletion |
 | Attachments | One optional reporter-uploaded PNG/JPEG, max 5 MiB, private storage |
 | Notifications | Per-project email notification toggle, recoverable delivery |
 | Safety | Origin allowlist, rate limits, project/storage caps, retention, tenant isolation |

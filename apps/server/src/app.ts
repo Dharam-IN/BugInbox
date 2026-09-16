@@ -11,6 +11,7 @@ import authPlugin from './plugins/auth.ts';
 import authRoutes from './routes/auth.ts';
 import projectRoutes from './routes/projects.ts';
 import reportRoutes from './routes/reports.ts';
+import statsRoutes from './routes/stats.ts';
 import widgetRoutes from './routes/widget.ts';
 
 /** JSON bodies are small by design; screenshots travel as multipart instead. */
@@ -109,6 +110,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(projectRoutes, { prefix: '/api/v1/projects' });
   await app.register(reportRoutes, { prefix: '/api/v1/reports' });
+  await app.register(statsRoutes, { prefix: '/api/v1/stats' });
   await app.register(widgetRoutes, { prefix: '/api/v1/widget' });
 
   return app;

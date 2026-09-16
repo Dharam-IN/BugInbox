@@ -33,8 +33,14 @@ apps/server         Fastify API + BullMQ worker (one codebase, two entrypoints)
 apps/dashboard      React + Vite public website and owner dashboard (static build)
   public/theme-init.js  Applies the saved theme before the first paint
   src/theme.tsx     Light/Dark/System preference, storage and OS listener
+  src/styles.css    Semantic colour tokens and base primitives
+  src/app.css       Application shell and redesigned screen primitives
   src/site.css      Public website styles (same tokens as the interface)
-  src/pages/HomePage.tsx  The public homepage
+  src/components/AppShell.tsx  Sidebar, page header and mobile drawer
+  src/components/charts.tsx    Daily SVG bar chart and status breakdown
+  src/lib/origin.ts            Setup-time URL normalisation (display only)
+  src/pages/         HomePage, Overview, Projects, NewProject (guided setup),
+                     Reports, ReportDetail, Install, Settings, Account, Auth
 packages/widget     TypeScript widget bundle (esbuild IIFE, Shadow DOM, no React)
 packages/shared     Path/eligibility matching + widget config types, used by both
 fixtures/host-site  Local integration fixture: plain HTML, SPA routes, custom button
@@ -83,10 +89,23 @@ Public, no session required: `/` (homepage), `/login`, `/signup`,
 `/forgot-password`, `/reset-password`, `/verify-email`. An unrecognised path
 redirects to `/`.
 
-Protected, redirect to `/login` without a session: `/dashboard` (projects),
-`/projects/new`, `/projects/:id/{reports,install,settings}`,
-`/projects/:id/reports/:reportId`, `/reports`, `/reports/:id`, `/account`.
-`/projects` redirects to `/dashboard` for anyone with the old link bookmarked.
+Protected, redirect to `/login` without a session: `/dashboard` (overview),
+`/projects` (projects list), `/projects/new` (guided setup),
+`/projects/:id/{reports,install,settings}`, `/projects/:id/reports/:reportId`,
+`/reports`, `/reports/:id`, `/account`.
+
+`/dashboard` is the overview, not the projects list. Every `/projects/:id/...`
+path, and the links in verification, reset and report-notification emails, are
+unchanged.
+
+## Overview metrics
+
+`GET /api/v1/stats/overview` is the only source for the overview. Its figures
+all describe one cohort — reports created inside the selected range, in the
+selected project scope — and the status figures are that cohort's **current**
+status, never "resolved during this period". Days are UTC.
+`docs/ARCHITECTURE.md` has the full definitions and limits; do not add a metric
+that cannot be computed from what is stored.
 
 ## Theme
 

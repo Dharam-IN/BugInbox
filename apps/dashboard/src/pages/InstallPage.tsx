@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resources } from '../api.ts';
-import { useProject } from './ProjectLayout.tsx';
+import { AppShell } from '../components/AppShell.tsx';
+import { ProjectTabs, useProjectContext } from './ProjectLayout.tsx';
 import { Card, CardHeader, ErrorNotice, Notice } from '../components/ui.tsx';
 
 function CopyBlock({ label, code }: { label: string; code: string }) {
@@ -34,7 +36,7 @@ function CopyBlock({ label, code }: { label: string; code: string }) {
 }
 
 export function InstallPage() {
-  const project = useProject();
+  const project = useProjectContext();
   const client = useQueryClient();
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<unknown>(null);
@@ -106,7 +108,20 @@ export function BugInboxWidget({ enabled }) {
   img-src 'self' data: blob:;`;
 
   return (
-    <div className="stack">
+    <AppShell
+      header={{
+        title: project.name,
+        breadcrumbs: [{ label: 'Projects', to: '/projects' }, { label: project.name }],
+        actions: (
+          <Link className="button secondary small" to={`/projects/${project.id}/reports`}>
+            View reports
+          </Link>
+        ),
+      }}
+    >
+      <div className="page-body">
+        <ProjectTabs project={project} />
+        <div className="stack">
       {project.origins.length === 0 ? (
         <Notice kind="warning">
           This project has no allowed origins, so every report is rejected. Add the origin of the website you are
@@ -225,5 +240,7 @@ export function BugInboxWidget({ enabled }) {
         </div>
       </Card>
     </div>
+      </div>
+    </AppShell>
   );
 }

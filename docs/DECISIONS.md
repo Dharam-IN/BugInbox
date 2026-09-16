@@ -167,3 +167,57 @@ emit React's development bundle — roughly twice the size — and that bundle w
 briefly shipped into the `web` image. `apps/dashboard/vite.config.ts` now sets
 `process.env.NODE_ENV = 'production'` for the `build` command, so the output does
 not depend on the ambient environment of whoever runs it.
+
+## D27 — The dashboard grew an application shell
+The interface had no persistent navigation: every screen was a centred column
+with a top bar. It now has a 240px sidebar (Overview, Projects, All reports,
+account and theme), a compact page header carrying the title, breadcrumbs and
+that screen's single contextual action, and a mobile drawer with a focus trap
+and Escape handling. Content sits in a fluid column capped at 1180px, so forms
+do not stretch across a wide monitor.
+
+## D28 — `/dashboard` became a real overview; projects moved to `/projects`
+`/dashboard` was a projects list surrounded by empty space. It is now an
+overview with a project and date scope, four summary cards, a daily chart, a
+status breakdown and recent reports. The projects list has its own route with a
+scannable table, search and per-row actions. Emailed links, verification links
+and every `/projects/:id/...` path are unchanged.
+
+## D29 — Charts are hand-drawn, and the daily one is SVG
+No charting library was added: the two charts are small enough to draw directly,
+which keeps the dependency count at zero and keeps chart code out of the widget
+bundle and off the public homepage. The daily chart is an inline SVG because an
+earlier HTML implementation had its bar heights overridden by the surrounding
+flex layout — an explicit `height: 3px` measured 88px. SVG geometry is expressed
+in the drawing's own coordinate space and cannot be perturbed that way. Both
+charts ship a `<details>` table of the same numbers for keyboard and screen
+reader users.
+
+## D30 — Project setup became a three-stage flow
+The old form opened with an "allowed origins" textarea. Setup is now Website →
+Appearance → Install and test. The website field accepts what people actually
+type: a bare domain is normalised to HTTPS and the exact origin that will be
+saved is shown back to them, a full page URL is reduced to its origin with an
+explanation, and credentials, wildcards and non-HTTP schemes are refused.
+www and non-www are deliberately not treated as equivalent, and nothing is ever
+fetched server-side as a "verification" shortcut. The project is created once,
+guarded by a ref so Back or a double click cannot make a second one, and the
+install step stays reachable from the projects list afterwards.
+
+## D31 — "Report received" is backed by stored data, and claims nothing more
+The install step's check queries the reports API for that project and only says
+"Report received" when a row exists. Copying the snippet proves nothing and is
+not treated as verification. The success message states plainly that this
+confirms ingestion, not the host site's layout, CSP or security.
+
+## D32 — Settings keeps one save action, in the page header
+The settings screen is long, so the save action lives in the sticky page header
+where it stays reachable. A second identical button at the bottom of the form
+was removed: two primary actions with the same label is ambiguous for both
+people and assistive technology.
+
+## D33 — Setup fields use explicit label/for rather than a wrapping label
+Wrapping the input and its hint in one `<label>` folded the hint into the
+accessible name, so "Website address" and "More website addresses" became
+ambiguous. The setup fields now use `htmlFor` with `aria-describedby` for hints
+and errors, which is both correct and unambiguous.

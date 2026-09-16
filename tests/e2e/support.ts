@@ -1,10 +1,34 @@
 import { expect, type Page } from '@playwright/test';
+import { Redis } from 'ioredis';
 
 export const WEB = process.env.BUGINBOX_WEB_URL ?? 'http://localhost:58080';
 export const FIXTURE = process.env.BUGINBOX_FIXTURE_URL ?? 'http://localhost:58081';
 export const MAILPIT = process.env.BUGINBOX_MAILPIT_URL ?? 'http://localhost:58025';
 
 export const PASSWORD = 'playwright-local-password';
+
+/**
+ * Clear only the public-ingestion limiter counters.
+ *
+ * Building a multi-page dataset means sending more reports from one address
+ * than the per-IP limit allows. The limit itself is real and is asserted by the
+ * API suite; here it would only stop the fixture being built.
+ */
+export async function clearIngestLimits(): Promise<void> {
+  const redis = new Redis(process.env.BUGINBOX_REDIS_URL ?? 'redis://127.0.0.1:56379', {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+  });
+  try {
+    await redis.connect();
+    for (const prefix of ['ingest:ip', 'ingest:project']) {
+      const keys = await redis.keys(`${prefix}*`);
+      if (keys.length > 0) await redis.del(...keys);
+    }
+  } finally {
+    redis.disconnect();
+  }
+}
 
 export function uniqueEmail(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}@owner.test`;
@@ -52,7 +76,8 @@ export async function signUpAndVerify(page: Page, email: string): Promise<void> 
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create account' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
+  // Signing up lands on the overview.
+  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 
   const message = await findMessage(email, (m) => m.Subject.includes('Confirm your BugInbox email'));
   const link = await linkFromMessage(message.ID, /https?:\/\/[^\s"'<>]*\/verify-email\?token=[^\s"'<>]+/);
@@ -61,17 +86,42 @@ export async function signUpAndVerify(page: Page, email: string): Promise<void> 
   await expect(page.getByText('Your email address is confirmed.')).toBeVisible();
 }
 
-export async function createProject(page: Page, name: string, origins: string[]): Promise<string> {
-  await page.goto(`${WEB}/projects/new`);
-  await page.getByLabel('Project name').fill(name);
-  await page.getByLabel('Allowed website origins').fill(origins.join('\n'));
-  await page.getByRole('button', { name: 'Create project' }).click();
+export interface CreatedProject {
+  id: string;
+  key: string;
+}
 
-  await expect(page.getByRole('heading', { name: 'Install the widget' })).toBeVisible();
-  const key = await page.locator('pre.snippet code').first().innerText();
-  const match = key.match(/bi_pub_[0-9a-f]{32}/);
-  if (!match) throw new Error('No project key found in the install snippet');
-  return match[0];
+/**
+ * Walk the guided setup: website, appearance, then the install step.
+ * The first origin is the primary website; any others go in the advanced box.
+ */
+export async function createProject(page: Page, name: string, origins: string[]): Promise<CreatedProject> {
+  await page.goto(`${WEB}/projects/new`);
+
+  await page.getByLabel('Project name').fill(name);
+  await page.getByLabel('Website address', { exact: true }).fill(origins[0]!);
+
+  const extras = origins.slice(1);
+  if (extras.length > 0) {
+    await page.getByText('Additional websites and local development').click();
+    await page.getByLabel('More website addresses', { exact: true }).fill(extras.join('\n'));
+  }
+
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { name: 'How should it look?' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('heading', { name: /^Install it on/ })).toBeVisible();
+
+  const snippet = await page.locator('pre.snippet code').first().innerText();
+  const key = snippet.match(/bi_pub_[0-9a-f]{32}/)?.[0];
+  if (!key) throw new Error('No project key found in the install snippet');
+
+  const settingsHref = await page.getByRole('link', { name: 'Widget settings' }).getAttribute('href');
+  const id = settingsHref?.match(/projects\/([0-9a-f-]{36})/)?.[1];
+  if (!id) throw new Error('No project id found on the install step');
+
+  return { id, key };
 }
 
 /** Open a fixture page with the project key remembered for that origin. */
