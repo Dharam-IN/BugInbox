@@ -103,3 +103,18 @@ A 5 MiB byte limit alone does not stop a highly compressible image that decodes
 to an enormous bitmap. Dimensions (10,000 px per side) and total pixels
 (40 million) are checked from decoded metadata, and sharp's `limitInputPixels`
 guards the decode itself.
+
+## D18 — Compose is parameterised enough to run a second isolated stack
+Verifying a genuinely fresh setup meant standing the whole stack up beside the
+running one. That exposed two hardcoded values: the network range and, more
+importantly, `env_file: [.env]`, which ignores `--env-file` and made a second
+stack send emails pointing at the first one's URL. The network range, the proxy
+address and the service env file are now variables with the previous values as
+defaults, so the ordinary single-stack workflow is unchanged.
+
+## D19 — The fixture's CSP is templated, not relaxed
+The fixture names the widget's origin in its `Content-Security-Policy`. Rather
+than widening the policy so a second stack could work, nginx's entrypoint expands
+`${BUGINBOX_WIDGET_ORIGIN}` into the template. The fixture keeps a strict,
+realistic policy, and it is the policy the installation instructions tell owners
+to use.

@@ -57,7 +57,7 @@ services:
       context: .
       target: server
     restart: unless-stopped
-    env_file: [.env]
+    env_file: ["${BUGINBOX_ENV_FILE:-.env}"]
     environment:
       HOST: 0.0.0.0
       PORT: 3000
@@ -86,7 +86,7 @@ services:
       target: server
     restart: unless-stopped
     command: ["node", "apps/server/dist/worker.js"]
-    env_file: [.env]
+    env_file: ["${BUGINBOX_ENV_FILE:-.env}"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-buginbox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-buginbox}
       REDIS_URL: redis://redis:6379
@@ -117,16 +117,20 @@ services:
       retries: 10
     networks:
       buginbox:
-        ipv4_address: 172.31.250.10
+        ipv4_address: ${BUGINBOX_PROXY_IP:-172.31.250.10}
 
   fixture:
     image: nginx:1.29-alpine
     restart: unless-stopped
+    environment:
+      # Named in the fixture's Content-Security-Policy, so the strict policy
+      # still allows the widget served by this stack.
+      BUGINBOX_WIDGET_ORIGIN: ${APP_BASE_URL:-http://localhost:58080}
     ports:
       - "127.0.0.1:${BUGINBOX_FIXTURE_PORT:-58081}:80"
     volumes:
       - ./fixtures/host-site:/usr/share/nginx/html:ro
-      - ./infra/nginx/fixture.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/fixture.conf.template:/etc/nginx/templates/default.conf.template:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 10s
@@ -143,4 +147,4 @@ networks:
   buginbox:
     ipam:
       config:
-        - subnet: 172.31.250.0/24
+        - subnet: ${BUGINBOX_SUBNET:-172.31.250.0/24}

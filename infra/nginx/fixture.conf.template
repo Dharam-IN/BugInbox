@@ -1,5 +1,9 @@
 # Integration fixture host website. Deliberately a different origin from the
 # BugInbox API so cross-origin behaviour is exercised for real.
+#
+# nginx's entrypoint expands ${BUGINBOX_WIDGET_ORIGIN} from the container
+# environment, so the fixture keeps a strict CSP that still names whichever
+# origin this stack serves the widget from.
 server {
     listen 80;
     server_name _;
@@ -9,7 +13,7 @@ server {
 
     # A host site with its own restrictive CSP, matching the documented
     # integration instructions.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' http://localhost:58080; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:58080; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' ${BUGINBOX_WIDGET_ORIGIN}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ${BUGINBOX_WIDGET_ORIGIN}; frame-ancestors 'none'" always;
 
     location /app/ {
         try_files $uri $uri/ /app/index.html;

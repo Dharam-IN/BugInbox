@@ -113,6 +113,14 @@ Manually verified in addition:
   deliberately forces `button { background: hotpink !important }`,
   `svg { width: 64px !important }` and similar; the shadow root keeps it intact,
   and the host page's own controls keep the host's styling.
+- **Fresh setup from empty volumes.** A second, fully isolated stack
+  (`docker compose -p buginbox-fresh`, its own ports, network, volumes and env
+  file) was built and started from nothing. Migrations applied automatically, the
+  database started empty, and the whole Playwright suite — all 5 tests —
+  passed against it. It was then removed with `down -v`; only the main stack's
+  volumes remain. This exposed two real defects, now fixed: `env_file: [.env]`
+  ignored `--env-file`, so the fresh stack emailed links pointing at the original
+  stack; and the fixture's CSP hardcoded the widget origin.
 
 ## Unverified areas
 
@@ -161,8 +169,9 @@ Branch `main`. Commits, all authored and committed as
 
 - `593505c` — API, schema and local environment
 - `470916e` — widget bundle, owner dashboard, fixture site and test suite
-- (this commit) — lint configuration, backup and restore scripts, proxy and
-  health fixes, and the completed documentation set
+- `4917450` — browser verification, backups, lint and full documentation
+- (this commit) — parameterised compose so a second isolated stack can run, and
+  the fresh-setup fixes it uncovered
 
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.
