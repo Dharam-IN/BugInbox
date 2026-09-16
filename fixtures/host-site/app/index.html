@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Tools — Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/fixture-config.js"></script>
+  </head>
+  <body>
+    <header>
+      <strong>Northwind Tools</strong>
+      <a href="/">Back to website</a>
+      <nav class="toolbar">
+        <button class="host-button secondary" data-route="/app/">Overview</button>
+        <button class="host-button secondary" data-route="/app/reports">Reports</button>
+        <button class="host-button secondary" data-route="/app/settings">Settings</button>
+        <button class="host-button secondary" data-route="/admin/billing">Admin billing (excluded)</button>
+      </nav>
+    </header>
+
+    <main>
+      <h1 id="route-title">Overview</h1>
+      <p>
+        A single-page application that routes with <code>history.pushState</code> and
+        <code>history.replaceState</code>. The widget re-evaluates its rules on every route change
+        without re-initialising itself or interfering with this router.
+      </p>
+
+      <div class="card">
+        <h2>Host-owned trigger</h2>
+        <p>
+          The floating launcher is not used here. This is the website's own button, wired to
+          <code>BugInbox.open()</code>.
+        </p>
+        <div class="toolbar">
+          <button class="host-button" id="report-button">Report a bug</button>
+          <button class="host-button secondary" id="show-button">show()</button>
+          <button class="host-button secondary" id="hide-button">hide()</button>
+          <button class="host-button secondary" id="close-button">close()</button>
+          <button class="host-button secondary" id="destroy-button">destroy()</button>
+          <button class="host-button secondary" id="init-button">init()</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Simulated host sign-in</h2>
+        <p>
+          BugInbox never inspects the host application's login state. The host decides, and calls
+          init or destroy itself.
+        </p>
+        <div class="toolbar">
+          <button class="host-button secondary" id="signin-button">Sign in</button>
+          <button class="host-button secondary" id="signout-button">Sign out</button>
+        </div>
+        <p class="status" id="auth-status">Signed out</p>
+      </div>
+
+      <div class="card">
+        <h2>State</h2>
+        <p class="status" id="route-status">route: /app/</p>
+        <p class="status" id="widget-state">Loading…</p>
+      </div>
+    </main>
+
+    <script src="/app/spa.js"></script>
+  </body>
+</html>

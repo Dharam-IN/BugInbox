@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Tools — Home</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/fixture-config.js"></script>
+  </head>
+  <body>
+    <header>
+      <strong>Northwind Tools</strong>
+      <a href="/">Home</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/admin/">Admin</a>
+      <a href="/app/">Dashboard (SPA)</a>
+      <a href="/offline.html">Offline test</a>
+    </header>
+
+    <main>
+      <h1>An ordinary multi-page website</h1>
+      <p>
+        This page installs BugInbox with the plain snippet: one script tag with a
+        <code>data-buginbox-key</code> attribute and nothing else. The launcher should appear in the
+        corner without any other code on the page.
+      </p>
+
+      <div class="card">
+        <h2>Host page controls</h2>
+        <p>These belong to the website, not to BugInbox. They must keep working at all times.</p>
+        <div class="toolbar">
+          <button class="host-button" id="host-counter">Host clicks: 0</button>
+          <button class="host-button secondary" id="host-alert">Set host message</button>
+        </div>
+        <p class="status" id="host-message">Host message: none</p>
+      </div>
+
+      <div class="card">
+        <h2>Widget state</h2>
+        <p class="status" id="widget-state">Loading…</p>
+      </div>
+    </main>
+
+    <p class="host-ribbon">Host ribbon with z-index 999999</p>
+
+    <script>
+      var clicks = 0;
+      document.getElementById('host-counter').addEventListener('click', function () {
+        clicks += 1;
+        this.textContent = 'Host clicks: ' + clicks;
+      });
+      document.getElementById('host-alert').addEventListener('click', function () {
+        document.getElementById('host-message').textContent = 'Host message: the page still works';
+      });
+
+      window.BUGINBOX_FIXTURE.load();
+
+      setInterval(function () {
+        var state = window.BugInbox ? window.BugInbox.state() : null;
+        document.getElementById('widget-state').textContent = state
+          ? 'eligible=' + state.eligible + ' launcher=' + state.launcherVisible + ' form=' + state.formOpen + ' — ' + state.reason
+          : 'BugInbox is not loaded on this page.';
+      }, 300);
+    </script>
+  </body>
+</html>

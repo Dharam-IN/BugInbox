@@ -4,7 +4,7 @@ import { getRedis } from './lib/redis.ts';
 import { logger } from './lib/logger.ts';
 import { processNotification } from './notifications.ts';
 
-export const NOTIFICATION_QUEUE = 'buginbox:notifications';
+export const NOTIFICATION_QUEUE = 'buginbox-notifications';
 
 interface NotificationJob {
   outboxId: string;

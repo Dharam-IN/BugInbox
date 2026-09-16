@@ -1,0 +1,84 @@
+/*
+ * Deliberately hostile host-page CSS. The widget must survive all of it,
+ * because real websites do exactly this sort of thing.
+ */
+* { box-sizing: content-box; }
+
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  background: #fbfaf7;
+  color: #23201c;
+  line-height: 1.6;
+}
+
+/* Blanket rules that would wreck a widget rendered in the light DOM. */
+div { margin: 6px; }
+button { background: hotpink !important; border: 3px dashed #4b0082 !important; font-size: 19px !important; }
+input, textarea { border: 4px double #b22222 !important; background: #fff8dc !important; }
+svg { width: 64px !important; height: 64px !important; }
+form { outline: 2px solid #ff8c00; }
+
+header {
+  background: #23201c;
+  color: #fbfaf7;
+  padding: 14px 20px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+header a { color: #ffd9a0; text-decoration: none; font-weight: bold; }
+header a:hover { text-decoration: underline; }
+
+main { max-width: 760px; margin: 0 auto; padding: 24px 20px 80px; }
+
+h1 { font-size: 28px; margin: 0 0 8px; }
+h2 { font-size: 20px; margin: 28px 0 8px; }
+p { margin: 0 0 12px; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e2ddd3;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.host-button {
+  background: #23201c !important;
+  border: 0 !important;
+  color: #fff !important;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 15px !important;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.host-button.secondary { background: #6b6156 !important; }
+
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+
+/* A host overlay that competes for stacking context. */
+.host-ribbon {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  z-index: 999999;
+  background: #4b0082;
+  color: #fff;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.status { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+
+.banner {
+  background: #fff3cd;
+  border: 1px solid #ffe08a;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 0 0 16px;
+}

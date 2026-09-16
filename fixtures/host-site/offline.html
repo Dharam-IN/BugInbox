@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Tools — BugInbox unreachable</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <strong>Northwind Tools</strong>
+      <a href="/">Home</a>
+      <a href="/offline.html">Offline test</a>
+    </header>
+    <main>
+      <h1>BugInbox deliberately unreachable</h1>
+      <p>
+        This page points the widget at a port nothing is listening on. The script fails to load and
+        the host page must be completely unaffected.
+      </p>
+      <div class="card">
+        <div class="toolbar">
+          <button class="host-button" id="host-counter">Host clicks: 0</button>
+        </div>
+        <p class="status" id="host-status">Host page ready</p>
+      </div>
+    </main>
+    <script>
+      var clicks = 0;
+      document.getElementById('host-counter').addEventListener('click', function () {
+        clicks += 1;
+        this.textContent = 'Host clicks: ' + clicks;
+        document.getElementById('host-status').textContent = 'Host page ready — clicks: ' + clicks;
+      });
+
+      var script = document.createElement('script');
+      script.src = 'http://127.0.0.1:59999/widget/v1/buginbox.js';
+      script.defer = true;
+      script.dataset.buginboxKey = 'bi_pub_00000000000000000000000000000000';
+      script.onerror = function () {
+        document.getElementById('host-status').textContent = 'Host page ready — BugInbox failed to load, page unaffected';
+      };
+      document.head.appendChild(script);
+    </script>
+  </body>
+</html>

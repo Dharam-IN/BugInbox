@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Tools — Pricing</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/fixture-config.js"></script>
+  </head>
+  <body>
+    <header>
+      <strong>Northwind Tools</strong>
+      <a href="/">Home</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/admin/">Admin</a>
+      <a href="/app/">Dashboard (SPA)</a>
+    </header>
+    <main>
+      <h1>Pricing</h1>
+      <p>
+        A second ordinary page, used to check that the widget appears on every included path and that
+        the stored page URL never keeps a query string.
+      </p>
+      <div class="card">
+        <p>Try this page with a query string, for example <code>/pricing.html?utm_source=email&amp;token=secret</code>.</p>
+        <p class="status" id="widget-state">Loading…</p>
+      </div>
+    </main>
+    <script>
+      window.BUGINBOX_FIXTURE.load();
+      setInterval(function () {
+        var state = window.BugInbox ? window.BugInbox.state() : null;
+        document.getElementById('widget-state').textContent = state
+          ? 'eligible=' + state.eligible + ' launcher=' + state.launcherVisible + ' — ' + state.reason
+          : 'BugInbox is not loaded.';
+      }, 300);
+    </script>
+  </body>
+</html>
