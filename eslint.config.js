@@ -29,8 +29,9 @@ export default tseslint.config(
     },
   },
   {
-    // The fixture host site is intentionally plain ES5-era browser JavaScript.
-    files: ['fixtures/**/*.js'],
+    // The fixture host site and the pre-paint theme script are intentionally
+    // plain, framework-free browser JavaScript loaded as classic scripts.
+    files: ['fixtures/**/*.js', 'apps/dashboard/public/**/*.js'],
     languageOptions: { globals: { ...globals.browser }, sourceType: 'script' },
     rules: { 'no-var': 'off' },
   },

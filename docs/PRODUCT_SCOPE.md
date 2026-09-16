@@ -39,10 +39,13 @@ because none of those have been established.
 | Attachments | One optional reporter-uploaded PNG/JPEG, max 5 MiB, private storage |
 | Notifications | Per-project email notification toggle, recoverable delivery |
 | Safety | Origin allowlist, rate limits, project/storage caps, retention, tenant isolation |
+| Public website | One responsive homepage at `/` explaining the product, linked to the existing sign-in and registration flows |
+| Appearance | Light, Dark and System theme for the interface and the public site, remembered per browser |
 | Operations | Docker Compose environment, Mailpit, health checks, seeds, tests |
 
 ## Explicitly out of scope for V1
 
+A blog, CMS, pricing pages or any marketing page beyond the single homepage.
 Teams, invitations and roles. Billing and subscriptions. Live chat and threaded
 comments. AI summaries or automatic debugging. Session recording. Console or
 network recording. Automatic screenshots or DOM capture. Video, screenshot

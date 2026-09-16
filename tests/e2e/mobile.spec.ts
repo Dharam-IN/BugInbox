@@ -9,7 +9,7 @@ test('the dashboard and the widget work at phone width', async ({ page, context 
   const projectKey = await createProject(page, 'Mobile Website', [FIXTURE]);
 
   await test.step('the dashboard lays out without horizontal scrolling', async () => {
-    await page.goto(`${WEB}/`);
+    await page.goto(`${WEB}/dashboard`);
     await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
 
     const overflow = await page.evaluate(

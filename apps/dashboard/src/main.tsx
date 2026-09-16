@@ -4,7 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App.tsx';
 import { AuthProvider } from './auth.tsx';
+import { ThemeProvider } from './theme.tsx';
 import './styles.css';
+import './site.css';
 
 const client = new QueryClient({
   defaultOptions: {
@@ -20,13 +22,15 @@ const container = document.getElementById('root');
 if (container) {
   createRoot(container).render(
     <StrictMode>
-      <QueryClientProvider client={client}>
-        <BrowserRouter>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={client}>
+          <BrowserRouter>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ThemeProvider>
     </StrictMode>,
   );
 }

@@ -11,12 +11,27 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null);
 
+/**
+ * A session always sets a readable `bi_csrf` cookie alongside the httpOnly
+ * session cookie. If it is absent there is definitely no session, so the public
+ * pages can skip the request entirely instead of provoking a 401 that browsers
+ * log as a console error. A stale cookie simply falls through to the request.
+ */
+function hasSessionCookie(): boolean {
+  try {
+    return /(?:^|;\s*)bi_csrf=/.test(document.cookie);
+  } catch {
+    return true;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
 
   const query = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
+      if (!hasSessionCookie()) return null;
       try {
         return (await resources.me()).owner;
       } catch (error) {
@@ -35,8 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await resources.logout().catch(() => undefined);
-    client.clear();
-    await client.invalidateQueries({ queryKey: ['me'] });
+    // Publish the signed-out state to the mounted observer first. Calling
+    // `client.clear()` here instead would remove the query object this
+    // observer is bound to, so the update never reached it and the interface
+    // kept looking signed in until the next manual reload.
+    client.setQueryData(['me'], null);
+    // Then drop every other cached query so nothing from the previous session
+    // is still in memory if someone signs in again in this tab.
+    client.removeQueries({ predicate: (query) => query.queryKey[0] !== 'me' });
   }, [client]);
 
   // Stable identity, so components may safely depend on the whole context value.

@@ -118,3 +118,52 @@ than widening the policy so a second stack could work, nginx's entrypoint expand
 `${BUGINBOX_WIDGET_ORIGIN}` into the template. The fixture keeps a strict,
 realistic policy, and it is the policy the installation instructions tell owners
 to use.
+
+## D20 — The projects list moved from `/` to `/dashboard`
+`/` now serves the public website, which has to be reachable signed out. Every
+other dashboard path is unchanged, so emailed report links, verification links
+and reset links still work, and `/projects` redirects to `/dashboard` for
+anyone holding the old bookmark. Unrecognised paths now land on the public
+homepage instead of bouncing a signed-out visitor to the sign-in form.
+
+## D21 — One token set, two dark selectors
+Dark values are written twice: once under
+`@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme='light'])`,
+and once under `:root[data-theme='dark']`. The duplication is deliberate and the
+blocks are kept adjacent. It means the page is themed correctly with no
+JavaScript at all, an explicit choice always wins over the operating system, and
+no component needs its own colour overrides. CSS-filter inversion was never an
+option: it would have inverted reporters' screenshots too.
+
+## D22 — The pre-paint theme script is a file, not an inline script
+The dashboard is served under `script-src 'self'` with no `'unsafe-inline'`, so
+the usual inline anti-flash snippet would be blocked. `public/theme-init.js` is
+a small classic script in `<head>`; a hash or nonce in the CSP would have to be
+regenerated on every edit.
+
+## D23 — Two colour tokens exist purely for contrast on coloured buttons
+Dark mode's accent is a light blue and its danger colour is a light red, so
+white label text on them measured around 2.2–2.6:1. `--accent-contrast` and
+`--danger-contrast` hold the label colour instead, which is white in light mode
+and near-black in dark mode.
+
+## D24 — The widget preview resolves "system" against the operating system
+A project's widget appearance is stored per project and describes what visitors
+to a customer's website see. The preview therefore follows the OS preference,
+never the dashboard theme, and it keeps the widget's own fixed palette rather
+than the interface tokens. Interface theme and widget theme are independent in
+both directions, and there is a browser test asserting it.
+
+## D25 — The public page skips the session probe when there is no session cookie
+A session always sets a readable `bi_csrf` cookie beside the httpOnly session
+cookie. If it is absent the dashboard skips `GET /auth/me` entirely, which keeps
+the signed-out homepage free of the 401 that browsers log as a console error and
+saves a request. A stale cookie simply falls through to the request as before.
+
+## D26 — The dashboard build pins production mode itself
+`scripts/host-env.sh` exports `NODE_ENV=development` so host-run server tooling
+talks to the containers. Running `npm run build` in that same shell made Vite
+emit React's development bundle — roughly twice the size — and that bundle was
+briefly shipped into the `web` image. `apps/dashboard/vite.config.ts` now sets
+`process.env.NODE_ENV = 'production'` for the `build` command, so the output does
+not depend on the ambient environment of whoever runs it.

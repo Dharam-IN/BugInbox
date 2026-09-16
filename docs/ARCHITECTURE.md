@@ -26,7 +26,7 @@
 
 | Component | What it is | Where |
 | --- | --- | --- |
-| `web` | nginx: serves the dashboard build and the widget bundle, proxies `/api/` | `infra/nginx/default.conf` |
+| `web` | nginx: serves the public site and dashboard build and the widget bundle, proxies `/api/` | `infra/nginx/default.conf` |
 | `api` | Fastify HTTP API | `apps/server/src/api.ts` |
 | `worker` | Same image and codebase, different entrypoint | `apps/server/src/worker.ts` |
 | `postgres` | Owners, projects, reports, attachments metadata, outbox | `apps/server/migrations` |
@@ -186,6 +186,32 @@ If a route change makes the current page ineligible while the form is open, the
 form closes. Submission is re-checked at send time as well, and when a page URL
 is collected the server re-evaluates the rules and rejects reports from excluded
 pages.
+
+## Public site and interface theme
+
+The public homepage and the owner dashboard are the same React bundle and the
+same router. `/` is public and renders the homepage whether or not there is a
+session; the projects list moved to `/dashboard`; everything else under the
+protected layout is unchanged. An unrecognised path redirects to `/`, so a
+signed-out visitor is never bounced to the sign-in form by a typo.
+
+Colour is expressed only as semantic custom properties in
+`apps/dashboard/src/styles.css`. Dark values appear in two adjacent blocks —
+`@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme='light'])`
+and `:root[data-theme='dark']` — so the document is themed correctly with no
+JavaScript, and an explicit choice always beats the operating system. Nothing
+uses a CSS filter to invert, which is what keeps reporters' screenshots exactly
+as they were uploaded.
+
+`apps/dashboard/public/theme-init.js` is a classic script in `<head>` that sets
+`data-theme` before the first paint. It is a file, not an inline script, because
+the web tier sends `script-src 'self'` with no `'unsafe-inline'`.
+
+The interface theme is a per-browser value in `localStorage` (`buginbox.theme`).
+A project's **widget** appearance is a per-project column served to customer
+websites through the widget config endpoint. The two never read or write each
+other, and the widget preview in project settings deliberately resolves its
+"system" option against the operating system rather than the dashboard theme.
 
 ## Configuration caching
 

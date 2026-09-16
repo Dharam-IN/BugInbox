@@ -11,6 +11,7 @@ import {
   type PathRule,
 } from '@buginbox/shared';
 import { resources, type Project, type ProjectAppearance } from '../api.ts';
+import { useSystemPrefersDark } from '../theme.tsx';
 import { useProject } from './ProjectLayout.tsx';
 import { Card, CardHeader, ErrorNotice, Notice, Segmented } from '../components/ui.tsx';
 
@@ -59,7 +60,10 @@ function WidgetPreview({ appearance, device }: { appearance: ProjectAppearance; 
   const offsetY = mobile ? appearance.mobileOffsetY : appearance.offsetY;
   const [vertical, horizontal] = appearance.position.split('-') as ['top' | 'bottom', 'left' | 'right'];
 
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  // Deliberately the operating system preference, not the dashboard theme: this
+  // previews what a visitor to the customer's website would see, and a project's
+  // widget appearance is stored per project, independently of this interface.
+  const prefersDark = useSystemPrefersDark();
   const dark = appearance.theme === 'dark' || (appearance.theme === 'system' && prefersDark);
 
   const hidden = mobile && !appearance.mobileEnabled;
@@ -256,7 +260,7 @@ export function SettingsPage() {
     mutationFn: () => resources.deleteProject(project.id, confirmName),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['projects'] });
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     },
   });
 

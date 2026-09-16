@@ -30,7 +30,11 @@ apps/server         Fastify API + BullMQ worker (one codebase, two entrypoints)
   src/routes/       auth, projects, reports (owner) and widget (public ingest)
   src/lib/          password, tokens, origins, URL sanitising, image, mail, limits
   migrations/       plain SQL, applied by src/db/migrate.ts
-apps/dashboard      React + Vite owner dashboard (static build)
+apps/dashboard      React + Vite public website and owner dashboard (static build)
+  public/theme-init.js  Applies the saved theme before the first paint
+  src/theme.tsx     Light/Dark/System preference, storage and OS listener
+  src/site.css      Public website styles (same tokens as the interface)
+  src/pages/HomePage.tsx  The public homepage
 packages/widget     TypeScript widget bundle (esbuild IIFE, Shadow DOM, no React)
 packages/shared     Path/eligibility matching + widget config types, used by both
 fixtures/host-site  Local integration fixture: plain HTML, SPA routes, custom button
@@ -66,10 +70,47 @@ Local URLs (all bound to 127.0.0.1):
 
 | What | URL |
 | --- | --- |
-| Dashboard + API + widget script | http://localhost:58080 |
+| Public website | http://localhost:58080/ |
+| Owner dashboard (projects) | http://localhost:58080/dashboard |
+| API + widget script | http://localhost:58080 |
 | Integration fixture host site | http://localhost:58081 |
 | Mailpit (all local email) | http://localhost:58025 |
 | Postgres / Redis (tests only) | 127.0.0.1:55432 / 127.0.0.1:56379 |
+
+## Routes
+
+Public, no session required: `/` (homepage), `/login`, `/signup`,
+`/forgot-password`, `/reset-password`, `/verify-email`. An unrecognised path
+redirects to `/`.
+
+Protected, redirect to `/login` without a session: `/dashboard` (projects),
+`/projects/new`, `/projects/:id/{reports,install,settings}`,
+`/projects/:id/reports/:reportId`, `/reports`, `/reports/:id`, `/account`.
+`/projects` redirects to `/dashboard` for anyone with the old link bookmarked.
+
+## Theme
+
+Light, Dark and System, chosen from the selector in the public nav, the
+dashboard top bar and the authentication pages. System is the default when
+nothing is saved. The preference is stored in `localStorage` under
+`buginbox.theme` and every read and write is wrapped in try/catch, so blocked
+storage degrades to "applies now, resets on reload" rather than breaking.
+
+`apps/dashboard/public/theme-init.js` applies the theme before the first paint.
+It is a separate file rather than an inline script because the app is served
+under `script-src 'self'`. The stylesheet still resolves correctly without it,
+falling back to the OS preference.
+
+All colours come from semantic tokens in `apps/dashboard/src/styles.css`. Dark
+values live in two adjacent blocks: `@media (prefers-color-scheme: dark)`
+scoped to `:root:not([data-theme='light'])`, and `:root[data-theme='dark']`.
+
+**The interface theme and a project's widget theme are separate.** The widget's
+appearance lives in the database per project (`projects.appearance`) and is
+served to customer websites; the interface theme is a per-browser preference in
+`localStorage`. Changing one never changes the other, and the widget preview in
+project settings deliberately resolves "system" against the operating system,
+not against the dashboard theme.
 
 ## Local-only boundaries
 

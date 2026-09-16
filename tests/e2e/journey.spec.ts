@@ -72,7 +72,7 @@ test('owner signs up, installs the widget, receives a report with a screenshot a
     await expect(item).toBeVisible();
     await item.click();
 
-    await expect(page.getByRole('heading', { name: 'Report' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Report', level: 1 })).toBeVisible();
     await expect(page.getByRole('link', { name: 'reporter@reporter.test' })).toBeVisible();
     // Query string and fragment must not have survived.
     await expect(page.getByText(`${FIXTURE}/pricing.html`, { exact: true })).toBeVisible();

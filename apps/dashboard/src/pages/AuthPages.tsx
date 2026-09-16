@@ -3,17 +3,21 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { resources } from '../api.ts';
 import { useAuth } from '../auth.tsx';
 import { Card, CardHeader, ErrorNotice, Notice } from '../components/ui.tsx';
+import { ThemeSelector } from '../components/ThemeSelector.tsx';
 
 const MIN_PASSWORD = 12;
 
 function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="content narrow" style={{ paddingTop: 48 }}>
-      <div className="brand" style={{ justifyContent: 'center', marginBottom: 20 }}>
-        <span className="brand-mark" aria-hidden="true">
-          B
-        </span>
-        BugInbox
+    <div className="content narrow" style={{ paddingTop: 32 }}>
+      <div className="spread" style={{ marginBottom: 20 }}>
+        <Link className="brand" to="/">
+          <span className="brand-mark" aria-hidden="true">
+            B
+          </span>
+          BugInbox
+        </Link>
+        <ThemeSelector compact />
       </div>
       {children}
     </div>
@@ -35,7 +39,7 @@ export function LoginPage() {
     try {
       await resources.login(email, password);
       await auth.refresh();
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err);
     } finally {
@@ -100,7 +104,7 @@ export function SignupPage() {
     try {
       await resources.signup(email, password);
       await auth.refresh();
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err);
     } finally {
@@ -304,7 +308,7 @@ export function VerifyEmailPage() {
           <>
             <Notice kind="success">Your email address is confirmed.</Notice>
             <p className="field-hint" style={{ marginTop: 14 }}>
-              <Link to="/">Go to your projects</Link>
+              <Link to="/dashboard">Go to your projects</Link>
             </p>
           </>
         ) : null}

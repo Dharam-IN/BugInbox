@@ -25,8 +25,8 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 900 } },
-      testIgnore: /mobile\.spec\.ts/,
+      testIgnore: /(^|\/)(mobile|site-mobile)\.spec\.ts/,
     },
-    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(^|\/)(mobile|site-mobile)\.spec\.ts/ },
   ],
 });

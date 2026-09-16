@@ -39,7 +39,9 @@ Everything binds to loopback only:
 
 | Service | URL |
 | --- | --- |
-| Dashboard, API and widget script | http://localhost:58080 |
+| Public website | http://localhost:58080/ |
+| Owner dashboard | http://localhost:58080/dashboard |
+| API and widget script | http://localhost:58080 |
 | Integration fixture website | http://localhost:58081 |
 | Mailpit — every email BugInbox sends locally | http://localhost:58025 |
 | Postgres (for host-run tests) | 127.0.0.1:55432 |
@@ -51,7 +53,9 @@ Stop with `npm run down` (data is kept) and follow logs with `npm run logs`.
 
 1. `npm run seed` prints a demo owner, password and project key. They are
    synthetic and `.test`-only; do not reuse them anywhere.
-2. Sign in at http://localhost:58080 with the printed credentials.
+2. Open http://localhost:58080 for the public homepage, then sign in at
+   http://localhost:58080/login with the printed credentials. The dashboard is
+   at http://localhost:58080/dashboard.
 3. Open the fixture website once with the project key so it remembers it:
    `http://localhost:58081/?key=<the printed project key>`
 4. The launcher appears in the corner. Send a report, with or without an image.
@@ -66,6 +70,18 @@ BugInbox is unreachable.
 Prefer to start from scratch? Sign up at http://localhost:58080/signup, open the
 confirmation email in Mailpit, create a project, and use the snippet its install
 page gives you.
+
+## Light and dark
+
+The interface and the public website support Light, Dark and System, with a
+selector in the public navigation, the dashboard top bar and the sign-in pages.
+System is the default. The choice is stored per browser under the
+`buginbox.theme` key and applied before the first paint, so there is no flash of
+the wrong theme on reload.
+
+This is separate from a project's **widget** appearance. The widget's
+light/dark/system setting lives with the project and is what visitors to your
+website see; changing your own dashboard theme never touches it.
 
 ## Installing the widget on your own site
 
@@ -148,13 +164,16 @@ source scripts/host-env.sh   # points host tooling at the published loopback por
 npm run lint
 npm run typecheck
 npm test                     # 64 API and integration tests (vitest)
-npm run test:e2e             # 5 browser journeys (Playwright, real Chromium)
+npm run test:e2e             # 15 browser journeys (Playwright, real Chromium)
 ```
 
 `npm test` uses a separate `buginbox_test` database, created on first run, so it
 never touches your development data. `npm run test:e2e` drives the real stack:
 signup, confirmation in Mailpit, project creation, a report with a screenshot
 from a different origin, the inbox, a status change, and the notification email.
+It also covers the public homepage, the sign-in and registration links,
+protected-route redirects, and theme selection, persistence and independence
+from widget settings.
 
 ## Backups
 
