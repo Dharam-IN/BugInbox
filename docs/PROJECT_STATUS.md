@@ -532,6 +532,10 @@ Branch `main`. Commits, all authored and committed as
 - `7da462d` — recorded that commit's hash in this document
 - `9560d69` — interface redesign: application shell, overview with real
   aggregates, guided project setup, structured inbox and report detail
+- `0732406` — recorded that commit's hash in this document
+- `7b71e13` — quality and reliability pass: nine defects in recovery paths and
+  accessibility fixed, regression tests added, and browser verification
+  extended to Firefox and WebKit with an axe-core accessibility scan
 
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.
