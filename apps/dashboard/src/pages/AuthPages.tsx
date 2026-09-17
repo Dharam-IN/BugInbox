@@ -87,6 +87,12 @@ function AuthLayout({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  // Same reason as the dashboard shell: these are routes in one document, so
+  // the tab would otherwise keep showing the homepage title.
+  useEffect(() => {
+    document.title = `${title} · BugInbox`;
+  }, [title]);
+
   return (
     <div className="auth-split">
       <aside className="auth-aside">
@@ -123,14 +129,14 @@ function AuthLayout({
           <ThemeSelector compact />
         </div>
 
-        <div className="auth-form-wrap">
+        <main className="auth-form-wrap" id="main">
           <div>
             <h1>{title}</h1>
             {subtitle ? <p className="sub">{subtitle}</p> : null}
           </div>
           {children}
           {footer ? <div className="field-hint">{footer}</div> : null}
-        </div>
+        </main>
       </div>
     </div>
   );
@@ -336,9 +342,22 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout title="Choose a new password">
+    <AuthLayout
+      title="Choose a new password"
+      // A reset link is only valid for an hour, so arriving with an expired or
+      // truncated one is ordinary. Without these the page was a dead end: an
+      // error message and no way to ask for another link.
+      footer={
+        <>
+          <Link to="/forgot-password">Send me a new reset link</Link> · <Link to="/login">Back to sign in</Link>
+        </>
+      }
+    >
       {!token ? (
-        <Notice kind="error">This link is missing its token. Request a new reset email.</Notice>
+        <Notice kind="error">
+          This link is missing its token. It may have been cut in half by your email client — copy the whole address, or
+          request a new one below.
+        </Notice>
       ) : done ? (
         <>
           <Notice kind="success">Your password has been changed and every existing session was signed out.</Notice>
@@ -370,6 +389,7 @@ export function VerifyEmailPage() {
   const [params] = useSearchParams();
   const auth = useAuth();
   const refresh = auth.refresh;
+  const owner = auth.owner;
   const token = params.get('token') ?? '';
   const [state, setState] = useState<'pending' | 'ok' | 'failed'>('pending');
   const [error, setError] = useState<unknown>(null);
@@ -413,8 +433,19 @@ export function VerifyEmailPage() {
       {state === 'failed' ? (
         <>
           <ErrorNotice error={error} />
+          {/* Confirmation links last 24 hours and are single-use, so this page
+              is reached often. It has to work for a reader who is signed out
+              in this browser as well as one who is signed in. */}
           <p className="field-hint" style={{ marginTop: 14 }}>
-            Signed in? Open <Link to="/account">your account</Link> to send a fresh link.
+            {owner ? (
+              <>
+                Open <Link to="/account">your account</Link> to send a fresh link.
+              </>
+            ) : (
+              <>
+                <Link to="/login">Sign in</Link>, then open your account page to send a fresh link.
+              </>
+            )}
           </p>
         </>
       ) : null}

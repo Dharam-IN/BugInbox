@@ -270,3 +270,103 @@ test('the homepage is usable by keyboard', async ({ page }) => {
   });
   expect(focusRing).not.toBe('none');
 });
+
+test('arrow keys move focus with the selection in the theme group', async ({ page }) => {
+  await page.goto(`${WEB}/`);
+
+  // Reach the group by keyboard alone; only the checked option is a tab stop.
+  for (let press = 0; press < 25; press += 1) {
+    await page.keyboard.press('Tab');
+    const reached = await page.evaluate(() =>
+      document.activeElement?.classList.contains('theme-option'),
+    );
+    if (reached) break;
+  }
+  await expect(page.locator('.theme-option:focus')).toHaveCount(1);
+
+  await page.keyboard.press('ArrowRight');
+
+  // A roving-tabindex radio group has to keep focus on the checked option.
+  // It used to leave focus behind on the option that had just become
+  // aria-checked="false" and tabindex="-1".
+  const state = await page.evaluate(() => {
+    const active = document.activeElement as HTMLElement | null;
+    return {
+      inGroup: Boolean(active?.classList.contains('theme-option')),
+      checked: active?.getAttribute('aria-checked'),
+      tabIndex: active?.getAttribute('tabindex'),
+      outline: active ? getComputedStyle(active).outlineStyle : 'none',
+    };
+  });
+  expect(state.inGroup).toBe(true);
+  expect(state.checked).toBe('true');
+  expect(state.tabIndex).toBe('0');
+  expect(state.outline, 'the moved focus is visible').not.toBe('none');
+});
+
+test('every screen has one main landmark to skip to', async ({ page }) => {
+  await signUpAndVerify(page, uniqueEmail('landmark'));
+  const project = await createProject(page, 'Landmark Site', ['https://landmark.example']);
+
+  const paths = [
+    '/',
+    '/dashboard',
+    '/projects',
+    '/projects/new',
+    '/reports',
+    '/account',
+    `/projects/${project.id}/install`,
+    `/projects/${project.id}/settings`,
+  ];
+  for (const path of paths) {
+    await page.goto(`${WEB}${path}`);
+    await expect(page.locator('main#main'), `${path} has one main landmark`).toHaveCount(1);
+    await expect(page.locator('a.skip-link[href="#main"]').first()).toHaveAttribute('href', '#main');
+  }
+
+  // Signed out, the authentication pages too.
+  await page.getByRole('button', { name: 'Sign out' }).first().click();
+  await page.waitForURL(/\/login/);
+  for (const path of ['/login', '/signup', '/forgot-password']) {
+    await page.goto(`${WEB}${path}`);
+    await expect(page.locator('main#main'), `${path} has one main landmark`).toHaveCount(1);
+  }
+});
+
+test('an expired reset or confirmation link offers a way forward', async ({ page }) => {
+  await page.goto(`${WEB}/reset-password?token=this-token-is-not-valid-at-all`);
+  await page.getByLabel('New password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Change password' }).click();
+  await expect(page.getByText('That reset link is invalid or has expired.')).toBeVisible();
+
+  // The page used to end here with no route out of it.
+  await page.getByRole('link', { name: 'Send me a new reset link' }).click();
+  await expect(page).toHaveURL(`${WEB}/forgot-password`);
+
+  // A link that lost its token in the mail client is recoverable too.
+  await page.goto(`${WEB}/reset-password`);
+  await expect(page.getByRole('link', { name: 'Send me a new reset link' })).toBeVisible();
+
+  // A signed-out reader of a stale confirmation link is sent to sign in.
+  await page.goto(`${WEB}/verify-email?token=this-token-is-not-valid-at-all`);
+  await expect(page.getByText('That confirmation link is invalid or has expired.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+});
+
+test('each screen names itself in the document title', async ({ page }) => {
+  await page.goto(`${WEB}/`);
+  await expect(page).toHaveTitle(/^BugInbox — collect website bug reports/);
+
+  await page.goto(`${WEB}/login`);
+  await expect(page).toHaveTitle('Sign in · BugInbox');
+
+  await signUpAndVerify(page, uniqueEmail('titles'));
+  await page.goto(`${WEB}/dashboard`);
+  await expect(page).toHaveTitle('Overview · BugInbox');
+  await page.goto(`${WEB}/projects`);
+  await expect(page).toHaveTitle('Projects · BugInbox');
+
+  // Returning to the public page restores the page's own title.
+  await page.goto(`${WEB}/`);
+  await expect(page).toHaveTitle(/^BugInbox — collect website bug reports/);
+});

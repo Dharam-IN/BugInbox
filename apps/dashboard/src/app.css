@@ -74,7 +74,7 @@
   text-align: left;
 }
 .nav-item:hover { background: var(--surface-sunken); color: var(--text); }
-.nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 620; }
+.nav-item.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 620; }
 .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .nav-item svg { flex: 0 0 auto; }
 .nav-item .count {
@@ -82,7 +82,7 @@
   font-size: 12px;
   font-weight: 660;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   border-radius: 999px;
   padding: 1px 7px;
 }
@@ -110,6 +110,9 @@
 /* ------------------------------------------------------------------- header */
 
 .app-main { display: flex; flex-direction: column; min-width: 0; }
+/* Transparent wrapper: the <main> landmark must not change how .page-body
+   stretches inside the column, so it repeats the flex context. */
+.app-content { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
 
 .page-bar {
   position: sticky;
@@ -207,6 +210,10 @@
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border);
 }
+/* Report detail has no page-intro, so its panels carry the h2 level directly
+   under the page's h1; elsewhere the page-intro supplies the h2 and panels are
+   h3. Both look the same. */
+.panel-head h2,
 .panel-head h3 { font-size: 15px; font-weight: 620; }
 .panel-head p { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
 .panel-body { padding: var(--space-5); }
@@ -359,7 +366,7 @@ details.chart-data th { color: var(--text-muted); font-weight: 600; }
   display: grid;
   place-items: center;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12.5px;
   font-weight: 700;
 }
@@ -447,7 +454,7 @@ details.chart-data th { color: var(--text-muted); font-weight: 600; }
   color: var(--text-muted);
   border: 1px solid var(--border);
 }
-.step-pill.current { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.step-pill.current { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent); }
 .step-pill.current .num { background: var(--accent); color: var(--accent-contrast); border-color: transparent; }
 .step-pill.done { color: var(--success); }
 .step-pill.done .num { background: var(--success-soft); color: var(--success); border-color: var(--success); }
@@ -597,7 +604,7 @@ details.advanced .advanced-body { padding: 0 14px 14px; display: grid; gap: var(
   border-radius: 50%;
   display: grid; place-items: center;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 800;
   margin-top: 1px;
@@ -693,7 +700,7 @@ details.advanced .advanced-body { padding: 0 14px 14px; display: grid; gap: var(
   margin-bottom: -1px;
 }
 .tab:hover { color: var(--text); }
-.tab[aria-selected='true'] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 620; }
+.tab[aria-selected='true'] { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 620; }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tab .count { font-variant-numeric: tabular-nums; opacity: 0.75; margin-left: 5px; }
 
@@ -731,7 +738,7 @@ details.advanced .advanced-body { padding: 0 14px 14px; display: grid; gap: var(
 
 /* Project section links reuse the tab appearance. */
 a.tab { text-decoration: none; display: inline-block; }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 620; }
+.tab.active { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 620; }
 
 /* The compact brand at the top of the auth panel is only needed on mobile,
    because the aside already carries it on wide screens. */

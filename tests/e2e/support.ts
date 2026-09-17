@@ -8,20 +8,24 @@ export const MAILPIT = process.env.BUGINBOX_MAILPIT_URL ?? 'http://localhost:580
 export const PASSWORD = 'playwright-local-password';
 
 /**
- * Clear only the public-ingestion limiter counters.
+ * Clear specific limiter counters.
  *
- * Building a multi-page dataset means sending more reports from one address
- * than the per-IP limit allows. The limit itself is real and is asserted by the
- * API suite; here it would only stop the fixture being built.
+ * Every browser test signs up its own isolated owner and several build a
+ * multi-page dataset, so one run makes far more requests from a single address
+ * than the per-IP limits allow. The limits themselves are real: they are
+ * asserted against the API in `apps/server/src/tests/ingest.test.ts`, and the
+ * in-memory fallback used when Redis is down is asserted there too. Clearing
+ * the counters here only stops the fixtures being throttled while they are
+ * built; nothing in the browser suite claims the limits do not exist.
  */
-export async function clearIngestLimits(): Promise<void> {
+async function clearLimits(prefixes: string[]): Promise<void> {
   const redis = new Redis(process.env.BUGINBOX_REDIS_URL ?? 'redis://127.0.0.1:56379', {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
   try {
     await redis.connect();
-    for (const prefix of ['ingest:ip', 'ingest:project']) {
+    for (const prefix of prefixes) {
       const keys = await redis.keys(`${prefix}*`);
       if (keys.length > 0) await redis.del(...keys);
     }
@@ -29,6 +33,9 @@ export async function clearIngestLimits(): Promise<void> {
     redis.disconnect();
   }
 }
+
+export const clearIngestLimits = () => clearLimits(['ingest:ip', 'ingest:project']);
+export const clearAuthLimits = () => clearLimits(['auth:ip']);
 
 export function uniqueEmail(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}@owner.test`;
@@ -71,6 +78,9 @@ export async function linkFromMessage(id: string, pattern: RegExp): Promise<stri
 
 /** Sign up through the real UI and confirm the address via Mailpit. */
 export async function signUpAndVerify(page: Page, email: string): Promise<void> {
+  // A full run across four browser projects signs up well over the per-IP
+  // allowance, which would otherwise fail unrelated tests with a 429.
+  await clearAuthLimits();
   await page.goto(`${WEB}/signup`);
   await page.getByLabel('Email address').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);

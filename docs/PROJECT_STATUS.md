@@ -1,7 +1,9 @@
 # Project status
 
-_Last updated: 2026-09-16. V1 is complete and verified locally, plus a public
-website, a full light/dark theme and an interface redesign._
+_Last updated: 2026-09-17. V1 is complete and verified locally, plus a public
+website, a full light/dark theme, an interface redesign, and a quality and
+reliability pass that fixed nine defects and added cross-browser and
+accessibility coverage._
 
 ## Current state
 
@@ -14,6 +16,12 @@ Three additions have since been implemented and verified: a light/dark/system
 theme across the whole product, a public homepage at `/`, and an interface
 redesign that replaced the centred-column screens with a proper application
 shell, a real overview, a guided project setup and a structured inbox.
+
+A quality and reliability pass on 2026-09-17 then reproduced and fixed nine
+defects in recovery paths and accessibility, and extended browser verification
+from Chromium alone to Chromium, Firefox and WebKit with an automated
+accessibility scan. The findings are recorded below, including the checks that
+passed and needed no change.
 
 Nothing has been pushed to any remote, nothing has been deployed, and no email
 has left the machine — Mailpit is the only mail destination.
@@ -68,7 +76,8 @@ aggregates with owner scoping in every query.
 
 - Light, Dark and System, selectable from the public navigation, the dashboard
   top bar and the authentication pages. Built as a radio group, so it is
-  announced as one control and arrow keys move between the options.
+  announced as one control and arrow keys move between the options, carrying
+  focus with the selection as a roving-tabindex group must.
 - System is the default when nothing has been saved.
 - Stored per browser in `localStorage` under `buginbox.theme`. Every read and
   write is wrapped in try/catch; with storage blocked the choice still applies
@@ -82,6 +91,11 @@ aggregates with owner scoping in every query.
 - Colours come from semantic tokens in `apps/dashboard/src/styles.css`, used by
   both the interface and the public site. No per-component overrides and no
   CSS-filter inversion, so reporters' screenshots render untouched.
+- `--accent` and `--accent-text` are separate on purpose. `--accent` fills
+  buttons and draws borders and focus rings, which are non-text and need 3:1.
+  `--accent-text` is what every text rule reads and is darker in light mode so
+  it clears 4.5:1 on the tinted and sunken surfaces it sits on. In dark mode the
+  two are the same value, which already passes.
 - **Interface theme and widget theme are independent.** A project's widget
   appearance lives in the database and describes what visitors to a customer's
   website see; the interface theme is a per-browser preference. Neither affects
@@ -139,19 +153,208 @@ and the fixture site, all ports on loopback; health checks and start-up retries;
 transactional outbox with a recovery sweep; hourly maintenance sweep for
 retention, orphan files and expired sessions/tokens; backup and restore scripts.
 
+## Quality and reliability pass, 2026-09-17
+
+Scope: the fresh-owner journey and setup recovery, cross-browser and
+accessibility behaviour, failure handling and privacy, and the accuracy of the
+public website. No feature was added and nothing in `docs/PRODUCT_SCOPE.md`
+changed. Every defect below was reproduced before it was changed and re-checked
+afterwards.
+
+### Defects found and fixed
+
+**1. Retrying an interrupted setup created a second project.** *High.*
+The guided setup writes the project, then saves the appearance in a second
+request. Nothing was recorded until both had succeeded, so when only the second
+failed the owner saw an error beside a still-enabled **Create project** button
+and their natural retry created a duplicate. Reproduced by failing the
+appearance `PATCH` and pressing the button twice: two projects named "Duplicate
+Probe". Now the project is remembered the instant the `POST` returns, a retry
+reuses it, and a notice says plainly that the project was created and only the
+appearance failed, with a link straight to its install page. Regression test:
+`tests/e2e/dashboard.spec.ts` — "retrying an interrupted setup does not create a
+second project", which fails two appearance saves, presses the button three
+times and asserts exactly one project exists.
+
+**2. Deleting a report opened from a link stranded the browser.** *High.*
+Deletion called `navigate(-1)`. Notification emails link to
+`/projects/:id/reports/:reportId`, which an owner opens in a tab with no history
+behind it, so after deleting they landed on `about:blank` with the application
+gone. Reproduced in a fresh tab; the URL afterwards was literally `about:blank`.
+Deletion now returns to the inbox the report was opened from. Regression test:
+`tests/e2e/dashboard.spec.ts` — "a report opened from a link is deleted without
+stranding the browser", covering both `/reports/:id` and the emailed
+`/projects/:id/reports/:reportId` shape.
+
+**3. Failed saves on the project settings screen were invisible.** *High.*
+**Save settings** sits in the sticky page bar, but the result was rendered in a
+card at the bottom of a form several screens long. Measured: with a 900 px
+viewport the error notice was at y ≈ 2190, so an owner pressed Save, saw
+nothing change and reasonably assumed it had worked. The header now carries a
+**Not saved** or **Saved** badge beside the button, and a failure scrolls the
+explanation into view and moves focus to it. The duplicate badge at the bottom
+of the form was removed.
+
+**4. An ended session gave no way back.** *Medium.*
+A 401 mid-edit rendered "You need to sign in to do that." with no link, while
+the shell still showed the signed-in navigation. `ErrorNotice` now offers
+"Sign in again in a new tab" for a 401 and for the stale-CSRF 403, and says that
+nothing typed on the page has been lost — signing in in the other tab restores
+the cookie and the same button then works. This covers every form in the
+application, since they all render through `ErrorNotice`. Verified: typed text
+survives, the link is present, and the notice is on screen.
+
+**5. An expired password-reset link was a dead end.** *Medium.*
+Reset links last one hour and confirmation links 24 hours, so arriving with a
+stale one is ordinary. The reset page showed "That reset link is invalid or has
+expired." and offered no links at all; a link truncated by a mail client
+produced the same dead end. It now offers "Send me a new reset link" and "Back
+to sign in". The confirmation page previously only suggested opening the account
+page, which is useless when signed out, and now sends a signed-out reader to
+sign in first. Regression test: `tests/e2e/site.spec.ts` — "an expired reset or
+confirmation link offers a way forward".
+
+**6. Light-theme accent text failed WCAG AA contrast.** *Serious (axe).*
+`#2f6df6` gave 3.96:1 on the tinted `--accent-soft` background and 4.18:1 on
+`--surface-sunken`, both under the 4.5:1 threshold for body text. It affected
+the active sidebar item, the active project tab, the New badge, segmented
+controls, the setup step pill, project avatars and the links under the
+authentication forms. A new `--accent-text` token is darker (`#2359d6`, ≥5.3:1
+on every surface it is used on) and is now what every text rule reads; `--accent`
+is unchanged for fills, borders and focus rings, which are non-text and only
+need 3:1. Dark mode already passed and keeps its own value.
+
+**7. No `main` landmark anywhere but the homepage.** *Moderate (axe).*
+Every dashboard and authentication screen reported its content as sitting
+outside any landmark, so landmark navigation and "skip to main content" had
+nothing to target. `AppShell` now renders `<main id="main">` around the page
+body and carries its own skip link, and the authentication layout does the
+same. Regression test: `tests/e2e/site.spec.ts` — "every screen has one main
+landmark to skip to".
+
+**8. The enlarged screenshot was not a real dialog.** *Moderate.*
+It declared `role="dialog" aria-modal="true"`, but Tab walked straight out of it
+— measured: the first Tab reached `<body>` and the next four reached the sidebar
+links and the theme control underneath the overlay — and closing it dropped
+focus to the document. It now keeps focus on its close button and returns focus
+to the control that opened it. Escape already worked and still does. Asserted in
+the existing `dashboard.spec.ts` lightbox test, now extended.
+
+**9. Arrow keys in the theme selector left focus behind.** *Moderate.*
+The selector is a roving-tabindex radio group. Pressing Arrow Right changed the
+selection but never moved focus, so the focused option was left
+`aria-checked="false"` and `tabindex="-1"`: a screen reader announced the wrong
+state and the next Tab re-entered the group somewhere else. Confirmed
+identically in Chromium, Firefox and WebKit. Focus now follows the selection.
+This also resolved the one pre-existing Firefox test failure, where the focus
+ring was absent because the element had never received a keyboard focus event.
+Regression test: `tests/e2e/site.spec.ts` — "arrow keys move focus with the
+selection in the theme group".
+
+### Smaller corrections
+
+- **Bare domains on the install page.** The guided setup turned `acme.example`
+  into `https://acme.example`, while the install page rejected the same input.
+  Both now use the same `resolveOrigin` helper, the field previews what will be
+  saved, and Add is disabled until the value parses. The previous complaint also
+  stayed on screen while the owner typed a corrected value; it now clears.
+- **Silent copy buttons.** A refused clipboard API left the button doing
+  nothing at all. It now says "Select it and copy"; the snippet is on the page
+  either way.
+- **Heading order on report detail.** That screen has no page introduction, so
+  its panels jumped from `h1` to `h3`. They are `h2` now, which is what axe
+  flagged.
+- **Document titles.** Every route in the application kept the marketing title
+  from `index.html`, so browser tabs and history entries were all identical.
+  Each screen now sets `"<screen> · BugInbox"`, and the homepage still sets its
+  own. Regression test: "each screen names itself in the document title".
+
+### Checked and found correct — no change made
+
+These were examined or actively exercised and needed no fix. They are recorded
+so the next pass does not repeat them.
+
+- **Unsaved settings survive a background refetch.** Typing into the settings
+  form and then firing a reconnect, which React Query refetches on, left the
+  draft intact.
+- **Widget failure handling.** With the ingest request aborted mid-submit, the
+  reporter saw "The report could not be sent. Check your connection and try
+  again.", the typed description and the attachment were kept, the submit button
+  was re-enabled, the host page logged no errors and stayed usable, and the
+  retry produced exactly **one** report, not two.
+- **Owner isolation across a sign-out.** A confidential report belonging to one
+  owner was not reachable, in markup or in cache, after signing out and signing
+  up as a different owner in the same tab.
+- **Rate limiting with Redis unavailable.** Exercised in isolation against a
+  dead Redis port, touching no running service: a 3-point limiter allowed
+  exactly 3 of 6 attempts, so the in-memory fallback really is bounded.
+- **200% zoom and phone width.** Every public and signed-in screen at 640×450
+  (equivalent to 200% zoom of 1280) and at 390 px wide, in both themes and in
+  all three engines: no horizontal overflow and no clipped control. The only
+  element reported off-canvas is the skip link, which is placed there
+  deliberately until it is focused.
+- **Install status evidence.** "Check for a report" queries the reports API for
+  that project. It reports what actually arrived and is not influenced by the
+  copy button, and its wording already says it confirms ingestion and not the
+  host site's layout, CSP or security.
+- **Sensitive URLs and external links.** `sanitisePageUrl` accepts only `http`
+  and `https`, strips query, fragment and credentials, so a `javascript:` URL
+  can never reach the anchor on the report screen; that anchor already carries
+  `rel="noreferrer noopener external"` and `target="_blank"`.
+- **Public website accuracy.** Every claim on the homepage was re-checked
+  against the implementation. There are no prices, testimonials, customer
+  counts, compliance or uptime claims, no invented production domain, canonical
+  URL or contact details, no dead call to action or placeholder link, and the
+  illustrative preview is labelled "Example — illustrative, not real reports"
+  and uses `example.com` addresses only. `index.html` already carries a useful
+  title and description that do not depend on JavaScript.
+- **Auth pages reached directly.** `/login`, `/signup`, `/forgot-password`,
+  `/reset-password` and `/verify-email` all work on a direct hit, and every
+  protected path still redirects a signed-out visitor to `/login`.
+
+### Browser and accessibility coverage
+
+`npm run test:e2e` now runs four projects — Chromium desktop, an emulated
+Pixel 7, Firefox and WebKit — and **83 tests pass in all of them**. Firefox and
+WebKit run the same desktop suite as Chromium: the full signup-to-notification
+journey, page rules and pause, SPA navigation and host resilience,
+keyboard-only operation of the widget, the redesigned dashboard screens, the
+public website and the theme.
+
+`tests/e2e/a11y.spec.ts` runs axe-core over the homepage, all five
+authentication screens, the overview, projects, guided setup, inbox, report
+detail, install, settings and account, **in both themes**, plus the enlarged
+screenshot dialog. It asserts zero violations at `wcag2a`, `wcag2aa`, `wcag21a`
+and `wcag21aa`, and it runs in all three engines.
+
+**What this does not establish.** An automated scan finds a subset of problems
+and is not a compliance claim; axe cannot judge whether a label is meaningful,
+whether a reading order makes sense, or whether a screen reader can complete a
+task. No assistive technology was used. Driving WebKit's Linux build is not
+evidence about Safari on a real Mac or iPhone, and the Pixel 7 project is an
+emulated viewport and user agent, not a real Android device. Contrast was
+measured by axe on rendered pages in both themes; nothing was checked for
+colour-blind legibility. Keyboard operation, focus trapping and focus return are
+asserted by hand-written tests rather than by the scanner.
+
+Running WebKit on this machine needed one system library that was missing
+(`libavif13`). It is a host dependency, not a project one; `npx playwright
+install-deps webkit` installs it where root is available.
+
 ## Verification evidence
 
-Run on 2026-09-16 against the Compose stack, from the repository root with
+Re-run on 2026-09-17 against the Compose stack, from the repository root with
 `source scripts/host-env.sh`:
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Lint | `npx eslint .` | passed, 0 problems |
 | Types | `npm run typecheck` | passed (shared, widget, server, dashboard) |
-| Build | `npm run build` | passed; widget 27.9 KiB minified, dashboard 373 KiB |
+| Build | `npm run build` | passed; widget 27.9 KiB minified, dashboard 416 KiB |
 | API and integration tests | `npm test` | **77 passed**, 7 files |
-| Browser verification | `npm run test:e2e` | **21 passed** (19 desktop, 2 mobile) |
-| Images | `docker compose build` | api, worker and web built |
+| Browser verification | `npm run test:e2e` | **83 passed** — 27 Chromium desktop, 2 Pixel 7, 27 Firefox, 27 WebKit |
+| Accessibility scan | `tests/e2e/a11y.spec.ts` | 0 axe violations on 13 screens × 2 themes, in all three engines |
+| Images | `docker compose build` | api, worker and web rebuilt and running |
 | Health | `GET /api/health/ready` | `{"status":"ok","checks":{"database":true,"redis":true}}` |
 
 `npm test` covers: authentication lifecycle including verification, reset and
@@ -256,17 +459,19 @@ Manually verified in addition:
 
 ## Unverified areas
 
-- No cross-browser testing. Only Chromium was driven; Firefox and WebKit are
-  untested, as are real iOS and Android devices. Theme behaviour in particular
-  has only been exercised in Chromium.
-- Contrast was checked by inspecting rendered pages, not with an automated
-  contrast auditing tool.
-- The public homepage is client-rendered. Its title and description are set from
-  JavaScript, so a crawler that does not run scripts sees only the defaults in
-  `index.html`. No canonical or social-share URL is set, because that depends on
-  a deployment domain that does not exist yet.
-- No screen-reader testing. Keyboard operation, labelling and focus management
-  are covered, but no assistive technology was used.
+- **No real-device testing.** Chromium, Firefox and WebKit are all driven, but
+  on Linux. WebKit's Linux build is not Safari on a Mac or an iPhone, and the
+  Pixel 7 project is an emulated viewport and user agent, not an Android
+  handset. Nothing here is evidence about iOS Safari specifically.
+- **No screen-reader testing.** Keyboard operation, labelling, landmarks, focus
+  trapping and focus return are asserted by tests, and axe-core reports no
+  violations, but no assistive technology was used and no compliance claim is
+  made. See the pass notes above for what the scan cannot see.
+- The public homepage is client-rendered. `index.html` carries a useful title
+  and description that need no JavaScript, and each route now sets its own title
+  once the bundle runs, but a crawler that does not execute scripts sees only
+  the `index.html` defaults for every route. No canonical or social-share URL is
+  set, because that depends on a deployment domain that does not exist yet.
 - No load or soak testing. Rate limits and caps are correct by test, not by
   measurement under sustained load.
 - No production deployment. Nothing was provisioned, no DNS was changed and no
@@ -292,7 +497,14 @@ Manually verified in addition:
 - The install step's check confirms that a report reached the server. It does
   not check the host site's layout, CSP or security, and says so.
 - Rate limiting falls back to per-process in-memory counters when Redis is down,
-  which is less precise across multiple API processes.
+  which is less precise across multiple API processes. The fallback is bounded:
+  exercised against an unreachable Redis, a 3-point limiter allowed exactly 3 of
+  6 attempts.
+- An ended session is discovered when a request fails, not before. The interface
+  still looks signed in until something is saved; the failure then explains what
+  happened and offers a sign-in link in a new tab so nothing typed is lost. There
+  is no background session poll, deliberately — it would add a request every few
+  seconds to solve a problem the error message already solves.
 
 ## Local services
 
@@ -342,5 +554,17 @@ Still outstanding for a real deployment, in addition to everything in
 None are required. If the work continues:
 
 1. Pagination controls in the inbox, using the cursor the API already returns.
-2. Cross-browser and assistive-technology verification.
+2. Verification with an actual screen reader, and on a real iPhone and Android
+   handset. The automated pass cannot substitute for either.
 3. A deployment runbook based on the requirements in `docs/ARCHITECTURE.md`.
+
+### Deferred, because it is a product or architecture decision
+
+Recorded rather than done, so the scope of a quality pass stays a quality pass:
+
+- **Pre-rendered or server-rendered metadata.** Route-specific titles now exist,
+  but they are set by JavaScript. Making them visible to a crawler that does not
+  run scripts means either pre-rendering the routes at build time or moving to a
+  server-rendered framework. That is an architectural change and it only matters
+  once there is a public deployment with a real domain, which also supplies the
+  canonical and social-share URLs that are missing for the same reason.

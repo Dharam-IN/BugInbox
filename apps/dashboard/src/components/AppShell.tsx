@@ -61,6 +61,13 @@ function AccountBlock({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+/** Names the current screen in the tab, the history entry and the window list. */
+function useDocumentTitle(title: string): void {
+  useEffect(() => {
+    document.title = `${title} · BugInbox`;
+  }, [title]);
+}
+
 export interface PageHeaderProps {
   title: string;
   breadcrumbs?: Array<{ label: string; to?: string }>;
@@ -73,6 +80,9 @@ export interface PageHeaderProps {
  */
 export function AppShell({ header, children }: { header: PageHeaderProps; children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The application is a single document, so without this every dashboard tab
+  // and history entry carried the marketing title from index.html.
+  useDocumentTitle(header.title);
   const location = useLocation();
   const drawerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -133,6 +143,9 @@ export function AppShell({ header, children }: { header: PageHeaderProps; childr
       </aside>
 
       <div className="app-main">
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
         <header className="page-bar">
           <button
             type="button"
@@ -162,7 +175,12 @@ export function AppShell({ header, children }: { header: PageHeaderProps; childr
           {header.actions ? <div className="page-bar-actions">{header.actions}</div> : null}
         </header>
 
-        {children}
+        {/* The one main landmark. Without it every screen reported its content
+            as sitting outside any landmark, so "skip to main content" and
+            landmark navigation had nothing to jump to. */}
+        <main className="app-content" id="main">
+          {children}
+        </main>
       </div>
 
       {drawerOpen ? (

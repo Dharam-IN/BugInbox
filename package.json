@@ -23,9 +23,11 @@
     "seed": "npm run seed -w @buginbox/server",
     "up": "docker compose up -d --build",
     "down": "docker compose down",
-    "logs": "docker compose logs -f"
+    "logs": "docker compose logs -f",
+    "test:e2e:chromium": "playwright test --project=desktop --project=mobile"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.5",
     "@playwright/test": "1.63.0",
     "@types/node": "24.13.5",

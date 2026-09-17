@@ -5,9 +5,12 @@ import { resources } from '../api.ts';
 import { AppShell } from '../components/AppShell.tsx';
 import { ProjectTabs, useProjectContext } from './ProjectLayout.tsx';
 import { Card, CardHeader, ErrorNotice, Notice } from '../components/ui.tsx';
+import { resolveOrigin } from '../lib/origin.ts';
 
 function CopyBlock({ label, code }: { label: string; code: string }) {
-  const [copied, setCopied] = useState(false);
+  // See CopyButton in NewProjectPage: a refused clipboard must say so rather
+  // than look like a button that does nothing.
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   return (
     <div className="stack">
       <div className="spread">
@@ -18,14 +21,14 @@ function CopyBlock({ label, code }: { label: string; code: string }) {
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(code);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1800);
+              setState('copied');
             } catch {
-              setCopied(false);
+              setState('failed');
             }
+            window.setTimeout(() => setState('idle'), 2500);
           }}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {state === 'copied' ? 'Copied' : state === 'failed' ? 'Select it and copy' : 'Copy'}
         </button>
       </div>
       <pre className="snippet">
@@ -54,15 +57,23 @@ export function InstallPage() {
     onError: (err) => setError(err),
   });
 
+  // The same normalisation the guided setup uses, so "acme.example" means the
+  // same thing on both screens. Previously the guided setup accepted a bare
+  // domain and this field rejected it.
+  const resolved = draft.trim() === '' ? null : resolveOrigin(draft);
+
   function addOrigin(event: FormEvent) {
     event.preventDefault();
-    const value = draft.trim();
-    if (value === '') return;
-    if (project.origins.includes(value)) {
-      setError(new Error('That origin is already allowed.'));
+    if (draft.trim() === '') return;
+    if (!resolved?.ok || !resolved.origin) {
+      setError(new Error(resolved?.error ?? 'That does not look like a website address.'));
       return;
     }
-    saveOrigins.mutate([...project.origins, value]);
+    if (project.origins.includes(resolved.origin)) {
+      setError(new Error(`${resolved.origin} is already allowed.`));
+      return;
+    }
+    saveOrigins.mutate([...project.origins, resolved.origin]);
   }
 
   function addLocalDevelopmentOrigins() {
@@ -173,10 +184,27 @@ export function BugInboxWidget({ enabled }) {
               type="text"
               value={draft}
               placeholder="https://acme.example"
-              onChange={(e) => setDraft(e.target.value)}
+              aria-describedby="add-origin-preview"
+              // Correcting the value clears the previous complaint about it.
+              onChange={(e) => {
+                setDraft(e.target.value);
+                if (error) setError(null);
+              }}
             />
+            <span className="field-hint" id="add-origin-preview">
+              {resolved?.ok && resolved.origin ? (
+                <>
+                  Will be saved as <code>{resolved.origin}</code>
+                  {resolved.note ? ` ${resolved.note}` : ''}
+                </>
+              ) : (
+                <>
+                  A bare domain such as <code>acme.example</code> is read as <code>https://acme.example</code>.
+                </>
+              )}
+            </span>
           </label>
-          <button className="button" type="submit" disabled={saveOrigins.isPending}>
+          <button className="button" type="submit" disabled={saveOrigins.isPending || resolved?.ok !== true}>
             Add
           </button>
           <button className="button secondary" type="button" onClick={addLocalDevelopmentOrigins} disabled={saveOrigins.isPending}>

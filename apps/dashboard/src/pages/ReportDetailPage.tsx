@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { resources, type ReportStatus } from '../api.ts';
@@ -6,19 +6,45 @@ import { AppShell } from '../components/AppShell.tsx';
 import { ErrorNotice, Loading, Segmented, StatusBadge, formatDateTime } from '../components/ui.tsx';
 import { BackIcon, CloseIcon } from '../components/icons.tsx';
 
+/**
+ * Enlarged screenshot.
+ *
+ * It declares aria-modal, so it has to behave like one: the close button is the
+ * only tab stop while it is open, and focus goes back to whatever opened it.
+ * Previously Tab walked straight out into the sidebar behind the overlay and
+ * closing left focus on the document body.
+ */
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
+    const opener = document.activeElement;
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      // One focusable control, so every Tab simply lands back on it.
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        closeRef.current?.focus();
+      }
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+
+    closeRef.current?.focus();
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
   }, [onClose]);
 
   return (
     <div className="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot" onClick={onClose}>
       <div className="lightbox-bar">
-        <button type="button" className="icon-button" aria-label="Close screenshot" onClick={onClose} autoFocus>
+        <button type="button" className="icon-button" aria-label="Close screenshot" onClick={onClose} ref={closeRef}>
           <CloseIcon />
         </button>
       </div>
@@ -28,7 +54,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 }
 
 export function ReportDetailPage() {
-  const { reportId = '' } = useParams();
+  const { reportId = '', projectId: routeProjectId } = useParams();
   const navigate = useNavigate();
   const client = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -55,7 +81,11 @@ export function ReportDetailPage() {
     mutationFn: () => resources.deleteReport(reportId),
     onSuccess: async () => {
       await invalidate();
-      navigate(-1);
+      // Go to the inbox the report was opened from rather than back through
+      // history. Notification emails link to /projects/:id/reports/:reportId
+      // in a tab with nothing behind it, so `navigate(-1)` used to leave the
+      // owner on about:blank with the application gone.
+      navigate(routeProjectId ? `/projects/${routeProjectId}/reports` : '/reports', { replace: true });
     },
   });
 
@@ -109,7 +139,7 @@ export function ReportDetailPage() {
             <div className="panel">
               <div className="panel-head">
                 <div>
-                  <h3>What the reporter said</h3>
+                  <h2>What the reporter said</h2>
                   <p>Received {formatDateTime(report.createdAt)}</p>
                 </div>
               </div>
@@ -122,7 +152,7 @@ export function ReportDetailPage() {
               <div className="panel">
                 <div className="panel-head">
                   <div>
-                    <h3>Screenshot</h3>
+                    <h2>Screenshot</h2>
                     <p>Attached by the reporter. Only you can open this file.</p>
                   </div>
                 </div>
@@ -146,7 +176,7 @@ export function ReportDetailPage() {
           <div style={{ display: 'grid', gap: 20 }}>
             <div className="panel">
               <div className="panel-head">
-                <h3>Status</h3>
+                <h2>Status</h2>
               </div>
               <div className="panel-body">
                 <ErrorNotice error={setStatus.error} />
@@ -166,7 +196,7 @@ export function ReportDetailPage() {
             <div className="panel">
               <div className="panel-head">
                 <div>
-                  <h3>Context</h3>
+                  <h2>Context</h2>
                   <p>Everything BugInbox collected, and nothing else.</p>
                 </div>
               </div>

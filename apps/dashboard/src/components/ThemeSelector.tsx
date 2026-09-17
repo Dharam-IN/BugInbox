@@ -75,6 +75,15 @@ export function ThemeSelector({ compact = false }: { compact?: boolean }) {
                 const delta = event.key === 'ArrowRight' ? 1 : -1;
                 const next = OPTIONS[(index + delta + OPTIONS.length) % OPTIONS.length]!;
                 setPreference(next.value);
+                // In a roving-tabindex radio group focus has to follow the
+                // selection. Without this the key press left focus on the
+                // option that is now aria-checked="false" and tabindex="-1",
+                // so a screen reader announced the wrong state and the next
+                // Tab re-entered the group somewhere else.
+                const group = event.currentTarget.parentElement;
+                group?.querySelectorAll<HTMLButtonElement>('button')[
+                  (index + delta + OPTIONS.length) % OPTIONS.length
+                ]?.focus();
               }}
             >
               <Icon />

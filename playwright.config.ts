@@ -28,5 +28,20 @@ export default defineConfig({
       testIgnore: /(^|\/)(mobile|site-mobile)\.spec\.ts/,
     },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /(^|\/)(mobile|site-mobile)\.spec\.ts/ },
+    // The same desktop suite in the other two engines. Install them first with
+    // `npx playwright install firefox webkit`; WebKit additionally needs the
+    // system libraries listed by `npx playwright install-deps webkit`.
+    // Driving WebKit's Linux build is not evidence about Safari on a real
+    // iPhone or Mac — see docs/PROJECT_STATUS.md.
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 900 } },
+      testIgnore: /(^|\/)(mobile|site-mobile)\.spec\.ts/,
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 900 } },
+      testIgnore: /(^|\/)(mobile|site-mobile)\.spec\.ts/,
+    },
   ],
 });

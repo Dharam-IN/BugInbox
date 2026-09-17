@@ -266,6 +266,98 @@ test('the report detail screenshot enlarges and closes with the keyboard', async
   const lightbox = page.getByRole('dialog', { name: 'Screenshot' });
   await expect(lightbox).toBeVisible();
 
+  // It declares aria-modal, so Tab must not walk out into the page behind it.
+  // It used to: the first Tab landed on <body> and the next ones on the
+  // sidebar links underneath the overlay.
+  for (let press = 0; press < 5; press += 1) {
+    await page.keyboard.press('Tab');
+    expect(
+      await page.evaluate(() => Boolean(document.activeElement?.closest('.lightbox'))),
+      'focus stays inside the enlarged screenshot',
+    ).toBe(true);
+  }
+
   await page.keyboard.press('Escape');
   await expect(lightbox).toBeHidden();
+
+  // Closing returns focus to the control that opened it, not to the document.
+  await expect(page.getByRole('button', { name: 'Enlarge the screenshot' })).toBeFocused();
+});
+
+test('a report opened from a link is deleted without stranding the browser', async ({ page, context }) => {
+  await signUpAndVerify(page, uniqueEmail('delete-nav'));
+  const project = await createProject(page, 'Delete Nav Site', [FIXTURE]);
+  await sendReports(page, project.key, 1, 'delete-nav');
+
+  await page.goto(`${WEB}/reports`);
+  const href = await page.locator('.report-row').first().getAttribute('href');
+  expect(href).toBeTruthy();
+
+  // A notification email opens the report in a tab with no history behind it.
+  // `navigate(-1)` after deleting then left the owner on about:blank.
+  const fresh = await context.newPage();
+  await fresh.goto(`${WEB}${href}`);
+  await expect(fresh.getByRole('heading', { name: 'What the reporter said' })).toBeVisible();
+
+  await fresh.getByRole('button', { name: 'Delete this report…' }).click();
+  await fresh.getByRole('button', { name: 'Yes, delete it' }).click();
+
+  await expect(fresh).toHaveURL(`${WEB}/reports`);
+  await expect(fresh.getByRole('heading', { name: 'All reports', level: 1 })).toBeVisible();
+  await expect(fresh.locator('.report-row')).toHaveCount(0);
+
+  // And the same for the shape a notification email actually sends,
+  // /projects/:projectId/reports/:reportId, also in a tab with no history.
+  await sendReports(page, project.key, 1, 'delete-nav-email');
+  await page.goto(`${WEB}/projects/${project.id}/reports`);
+  const emailedId = (await page.locator('.report-row').first().getAttribute('href'))!.split('/').pop();
+
+  const emailed = await context.newPage();
+  await emailed.goto(`${WEB}/projects/${project.id}/reports/${emailedId}`);
+  await expect(emailed.getByRole('heading', { name: 'What the reporter said' })).toBeVisible();
+  await emailed.getByRole('button', { name: 'Delete this report…' }).click();
+  await emailed.getByRole('button', { name: 'Yes, delete it' }).click();
+  await expect(emailed).toHaveURL(`${WEB}/projects/${project.id}/reports`);
+  await expect(emailed.locator('.report-row')).toHaveCount(0);
+  await emailed.close();
+  await fresh.close();
+});
+
+test('retrying an interrupted setup does not create a second project', async ({ page }) => {
+  await signUpAndVerify(page, uniqueEmail('setup-retry'));
+
+  // The guided setup writes the project, then saves the appearance in a second
+  // call. Failing only the second one is the realistic interruption: the
+  // project already exists, and the owner is invited to try again.
+  let appearanceCallsFailed = 0;
+  await page.route('**/api/v1/projects/*', async (route) => {
+    if (route.request().method() === 'PATCH' && appearanceCallsFailed < 2) {
+      appearanceCallsFailed += 1;
+      await route.abort('failed');
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`${WEB}/projects/new`);
+  await page.getByLabel('Project name').fill('Retry Once');
+  await page.getByLabel('Website address', { exact: true }).fill('https://retry.example');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Create project' }).click();
+
+  // The first failure says plainly that the project itself was saved.
+  await expect(page.getByText(/was created — only the appearance could not be saved/)).toBeVisible();
+
+  // A second attempt, and a third that succeeds.
+  await page.getByRole('button', { name: 'Save the appearance and continue' }).click();
+  await expect(page.getByText(/was created — only the appearance could not be saved/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save the appearance and continue' }).click();
+  await expect(page.getByRole('heading', { name: /^Install it on/ })).toBeVisible();
+
+  expect(appearanceCallsFailed, 'both simulated failures were exercised').toBe(2);
+
+  // Three presses of the create button, exactly one project.
+  await page.goto(`${WEB}/projects`);
+  await expect(page.getByRole('link', { name: 'Retry Once', exact: true })).toHaveCount(1);
+  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
 });

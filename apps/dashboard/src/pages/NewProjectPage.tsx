@@ -104,7 +104,10 @@ function MiniPreview({
 }
 
 function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  // The clipboard API is refused outright in some browsers and configurations.
+  // Saying so beats a button that silently does nothing; the snippet is on the
+  // page either way, so selecting it by hand always works.
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   return (
     <button
       type="button"
@@ -112,14 +115,14 @@ function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(value);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1800);
+          setState('copied');
         } catch {
-          setCopied(false);
+          setState('failed');
         }
+        window.setTimeout(() => setState('idle'), 2500);
       }}
     >
-      {copied ? 'Copied' : label}
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Select it and copy' : label}
     </button>
   );
 }
@@ -143,7 +146,11 @@ export function NewProjectPage() {
 
   // Step C
   const [project, setProject] = useState<Project | null>(null);
-  const createdRef = useRef(false);
+  // The project the server has already accepted, recorded the instant the POST
+  // returns. Everything after that point is a retryable follow-up, and this is
+  // what stops a retry creating a second project.
+  const createdRef = useRef<Project | null>(null);
+  const [savedProject, setSavedProject] = useState<Project | null>(null);
 
   const resolved = useMemo(() => (website.trim() === '' ? null : resolveOrigin(website)), [website]);
   const extras = useMemo(
@@ -161,34 +168,44 @@ export function NewProjectPage() {
 
   // Warn before a reload or tab close would discard unsaved setup input.
   useEffect(() => {
-    if (!dirty || project) return;
+    if (!dirty || project || savedProject) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty, project]);
+  }, [dirty, project, savedProject]);
 
   const create = useMutation({
     mutationFn: async () => {
-      const origins = [resolved!.origin!, ...extras.map((entry) => entry.result.origin!)];
-      const created = await resources.createProject(name.trim(), [...new Set(origins)]);
-      // Appearance is saved as a second call so the project exists even if the
-      // owner closes the tab mid-way; it is then editable from settings.
-      const updated = await resources.updateProject(created.project.id, {
+      // Creation and appearance are two calls. Only the first one is allowed to
+      // run once: if it has already succeeded, a retry must reuse that project
+      // instead of creating a second one. The previous version kept no record
+      // until both calls had succeeded, so a failed appearance save turned the
+      // owner's natural "try again" into a duplicate project.
+      let base = createdRef.current;
+      if (!base) {
+        const origins = [resolved!.origin!, ...extras.map((entry) => entry.result.origin!)];
+        base = (await resources.createProject(name.trim(), [...new Set(origins)])).project;
+        createdRef.current = base;
+        setSavedProject(base);
+        await client.invalidateQueries({ queryKey: ['projects'] });
+      }
+
+      const updated = await resources.updateProject(base.id, {
         appearance: {
-          ...created.project.appearance,
+          ...base.appearance,
           launcherText: appearance.launcherText.trim() || DEFAULT_APPEARANCE.launcherText,
           accentColor: appearance.accentColor,
           theme: appearance.theme,
           position: appearance.position,
         },
       });
+      createdRef.current = updated.project;
       return updated.project;
     },
     onSuccess: async (created) => {
-      createdRef.current = true;
       setProject(created);
       setStep('install');
       await client.invalidateQueries({ queryKey: ['projects'] });
@@ -218,10 +235,13 @@ export function NewProjectPage() {
   }
 
   function createProject() {
-    // Guard against a double click or a Back-then-Continue creating two
-    // projects. Once created we only ever move forward to the install step.
-    if (createdRef.current || create.isPending) {
-      if (project) setStep('install');
+    // A second click while the first is still in flight is ignored, and once
+    // the install step has the finished project there is nothing left to do
+    // but show it. Anything else — including a retry after a failure — goes
+    // through the mutation, which reuses the project the server already has.
+    if (create.isPending) return;
+    if (project) {
+      setStep('install');
       return;
     }
     create.mutate();
@@ -483,8 +503,27 @@ export function NewProjectPage() {
 
               <ErrorNotice error={create.error} />
 
+              {/* The project row is written before the appearance is. If only
+                  the second call failed the project already exists, so say so
+                  and offer the way on rather than letting the owner think
+                  nothing was saved. */}
+              {create.isError && savedProject ? (
+                <Notice kind="warning">
+                  <strong>{savedProject.name}</strong> was created — only the appearance could not be saved, so it is
+                  using the defaults. Trying again saves the appearance to the same project; it will not create a second
+                  one. You can also{' '}
+                  <Link to={`/projects/${savedProject.id}/install`}>go straight to installing it</Link> and change the
+                  appearance later in its settings.
+                </Notice>
+              ) : null}
+
               <div className="step-actions">
-                <button type="button" className="button secondary" onClick={() => setStep('website')} disabled={create.isPending}>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setStep('website')}
+                  disabled={create.isPending || savedProject !== null}
+                >
                   Back
                 </button>
                 <span className="spacer" />
@@ -494,7 +533,11 @@ export function NewProjectPage() {
                   onClick={createProject}
                   disabled={create.isPending || !ACCENT_COLOR_PATTERN.test(appearance.accentColor)}
                 >
-                  {create.isPending ? 'Creating…' : 'Create project'}
+                  {create.isPending
+                    ? 'Creating…'
+                    : savedProject
+                      ? 'Save the appearance and continue'
+                      : 'Create project'}
                 </button>
               </div>
             </div>

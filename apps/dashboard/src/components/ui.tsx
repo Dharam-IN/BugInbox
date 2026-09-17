@@ -25,10 +25,18 @@ export function Notice({ kind, children }: { kind: 'error' | 'success' | 'info' 
   );
 }
 
-/** Renders whatever the API said went wrong, including per-field messages. */
+/**
+ * Renders whatever the API said went wrong, including per-field messages.
+ *
+ * A 401 and a stale-CSRF 403 both mean "your session ended while you were
+ * working". Those get an explicit way back, opened in a new tab so that
+ * whatever is typed on this page survives: sign in there, come back here and
+ * press the same button again.
+ */
 export function ErrorNotice({ error }: { error: unknown }) {
   if (!error) return null;
   if (error instanceof ApiError) {
+    const sessionEnded = error.status === 401 || (error.status === 403 && error.code === 'forbidden');
     return (
       <div className="notice error" role="alert">
         <div>{error.message}</div>
@@ -38,6 +46,14 @@ export function ErrorNotice({ error }: { error: unknown }) {
               <li key={`${field.path}-${field.message}`}>{field.message}</li>
             ))}
           </ul>
+        ) : null}
+        {sessionEnded ? (
+          <div style={{ marginTop: 6 }}>
+            <a href="/login" target="_blank" rel="noreferrer">
+              Sign in again in a new tab
+            </a>
+            , then come back to this page and try again. Nothing you have typed here has been lost.
+          </div>
         ) : null}
       </div>
     );

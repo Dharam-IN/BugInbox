@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -223,6 +223,10 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [confirmName, setConfirmName] = useState('');
   const [showDelete, setShowDelete] = useState(false);
+  // Save lives in the sticky header; this form is several screens long, so a
+  // failure reported only at the bottom was simply never seen. The result is
+  // brought to the owner instead of waiting to be scrolled to.
+  const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDraft(toDraft(project));
@@ -250,6 +254,10 @@ export function SettingsPage() {
       window.setTimeout(() => setSaved(false), 2500);
       await invalidate();
     },
+    onError: () => {
+      resultRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      resultRef.current?.focus();
+    },
   });
 
   const toggleStatus = useMutation({
@@ -274,9 +282,15 @@ export function SettingsPage() {
         title: project.name,
         breadcrumbs: [{ label: 'Projects', to: '/projects' }, { label: project.name }],
         actions: (
-          <button className="button small" type="button" onClick={() => save.mutate()} disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save settings'}
-          </button>
+          <>
+            {/* Beside the button that caused it, so the outcome is never
+                several screens away from the action. */}
+            {save.isError ? <span className="badge danger">Not saved</span> : null}
+            {saved ? <span className="badge resolved">Saved</span> : null}
+            <button className="button small" type="button" onClick={() => save.mutate()} disabled={save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save settings'}
+            </button>
+          </>
         ),
       }}
     >
@@ -582,9 +596,10 @@ export function SettingsPage() {
             </button>
             <span className="field-hint">Use “Save settings” at the top of the page to apply your changes.</span>
           </div>
-          {saved ? <span className="badge resolved">Saved</span> : null}
         </div>
-        <ErrorNotice error={save.error} />
+        <div ref={resultRef} tabIndex={-1} style={{ outline: 'none' }}>
+          <ErrorNotice error={save.error} />
+        </div>
       </Card>
 
       <Card>

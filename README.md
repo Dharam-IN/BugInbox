@@ -166,7 +166,8 @@ source scripts/host-env.sh   # points host tooling at the published loopback por
 npm run lint
 npm run typecheck
 npm test                     # 77 API and integration tests (vitest)
-npm run test:e2e             # 21 browser journeys (Playwright, real Chromium)
+npm run test:e2e             # 83 browser journeys (Playwright)
+npm run test:e2e:chromium    # just Chromium desktop + phone, if the others are not installed
 ```
 
 `npm test` uses a separate `buginbox_test` database, created on first run, so it
@@ -174,8 +175,21 @@ never touches your development data. `npm run test:e2e` drives the real stack:
 signup, confirmation in Mailpit, project creation, a report with a screenshot
 from a different origin, the inbox, a status change, and the notification email.
 It also covers the public homepage, the sign-in and registration links,
-protected-route redirects, and theme selection, persistence and independence
-from widget settings.
+protected-route redirects, theme selection, persistence and independence from
+widget settings, and an axe-core accessibility scan of every screen in both
+themes.
+
+`npm run test:e2e` runs four projects: Chromium desktop, an emulated Pixel 7,
+Firefox and WebKit. The last two need their browsers downloaded first:
+
+```bash
+npx playwright install firefox webkit
+sudo npx playwright install-deps webkit   # WebKit also needs system libraries
+```
+
+Without them, use `npm run test:e2e:chromium`. Driving WebKit's Linux build is
+not evidence about Safari on a real Mac or iPhone; see the browser coverage
+section in `docs/PROJECT_STATUS.md`.
 
 ## Backups
 

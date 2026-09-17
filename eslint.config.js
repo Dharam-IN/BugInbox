@@ -11,6 +11,8 @@ export default tseslint.config(
       'test-results/**',
       'playwright-report/**',
       'backups/**',
+      // Git-ignored local scratch: uploads, throwaway probe scripts, dumps.
+      '.local/**',
     ],
   },
   js.configs.recommended,
