@@ -540,6 +540,86 @@ Branch `main`. Commits, all authored and committed as
 Nothing has been pushed. Pushing waits for an explicit request, after verifying
 the remote and that SSH authenticates as `Dharam-IN`.
 
+## Deployment pipeline, 2026-09-21
+
+Added but **not yet exercised against a real server**: written and verified
+locally, nothing pushed, deployed or sent anywhere.
+
+One EC2 instance, five containers, behind a Caddy instance that is already
+running other sites there. GitHub Actions builds the images, pushes them to
+GHCR and SSHes in to pull and restart. Nothing is built on the instance.
+`docs/DEPLOYMENT.md` is the runbook.
+
+Deliberately small, at the repository owner's request, so that the server-side
+work stays understandable and hand-operable. Seven files:
+
+| File | What it is |
+| --- | --- |
+| `docker-compose.prod.yml` | Five containers, pulls images, nothing published on the host |
+| `.env.production.example` | Template for the server's `.env`; placeholders only |
+| `infra/nginx/prod.conf.template` | `default.conf` plus real-client-IP recovery behind Caddy |
+| `infra/caddy/buginbox.Caddyfile` | Passive reference copy; never copied or applied by anything here |
+| `.github/workflows/ci.yml` | Lint, typecheck, build, the integration suite |
+| `.github/workflows/cd.yml` | Build, push to GHCR, SSH, pull, `up -d`, one health check |
+| `docs/DEPLOYMENT.md` | Runbook |
+
+`Dockerfile`, `scripts/backup.sh` and `scripts/restore.sh` are unchanged. The
+`Dockerfile` already built both production targets.
+
+**Caddy is outside this project.** Nothing installs, configures, starts, stops
+or reloads it, and nothing writes to `/etc/caddy`. The shared Docker network is
+declared `external: true`, so Compose attaches to it and fails if it is absent
+rather than creating it. Caddy is shared with other projects, so the reference
+configuration is a standalone site file intended for an `import sites/*.caddy`
+arrangement, not a paste into the global Caddyfile.
+
+**Deliberately not built**, to keep the deployment small: rollback automation,
+rollback workflow, blue-green or canary, a smoke-test framework, backup or
+restore automation, an E2E workflow, infrastructure provisioning, server setup
+scripts, and anything that manages Caddy. Going back to an earlier build is a
+documented manual step: every build carries a `sha-` tag, and the compose file
+reads the image from an optional `.env` override.
+
+Three defects in the existing configuration were found while doing this. They
+are fixed in the production files rather than the development ones, which are
+correct for a laptop:
+
+- **`BUGINBOX_SUBNET=172.31.250.0/24` is inside the default AWS VPC range**
+  (`172.31.0.0/16`). A Docker bridge there on an EC2 instance blackholes
+  traffic to the rest of the VPC. Production defaults to `10.83.0.0/24`.
+- **Client IP recovery breaks with an extra hop in front.**
+  `infra/nginx/default.conf` replaces `X-Forwarded-For` with `$remote_addr`,
+  which is right when nginx is the edge and wrong behind Caddy: every reporter
+  would appear to come from Caddy, collapsing `INGEST_RATE_PER_IP` and
+  `AUTH_RATE_PER_IP` into one shared bucket and recording the wrong address on
+  every report. The production config adds `set_real_ip_from` scoped to the
+  Caddy network with `real_ip_recursive off`, so `$remote_addr` becomes the
+  address Caddy appended — the true client — while a client-supplied entry
+  earlier in the header is still ignored.
+- **`X-Forwarded-Proto` was this hop's `$scheme`**, which is plain http behind
+  a TLS-terminating proxy. A `map` now prefers Caddy's value and falls back to
+  `$scheme` only if absent.
+
+The production nginx config differs from the development one by seven added
+lines and one changed line; everything else is identical.
+
+Verified locally:
+
+- Both image targets build from the unchanged `Dockerfile`.
+- The production nginx template renders through the entrypoint's `envsubst`
+  and passes `nginx -t`; serving from that container gives `/healthz` 200,
+  `/` 200, `/login` 200 (SPA fallback) and `/widget/v1/buginbox.js` 200 with
+  `Access-Control-Allow-Origin: *`.
+- `docker compose -f docker-compose.prod.yml config` resolves, and the
+  required-variable guards fail loudly when `.env` is incomplete.
+- The development stack still comes up and `npm test` passes 77/77.
+- `npm run lint` and `npm run typecheck` pass.
+
+Not verified, because it cannot be from here: the workflows have never run, no
+image has been pushed, no server has been rolled, and no mail has been sent
+through a real SMTP provider. Production email reads from the server's `.env`;
+no credential exists in the repository or in CI.
+
 ## Deployment-dependent configuration
 
 Still outstanding for a real deployment, in addition to everything in
@@ -560,7 +640,8 @@ None are required. If the work continues:
 1. Pagination controls in the inbox, using the cursor the API already returns.
 2. Verification with an actual screen reader, and on a real iPhone and Android
    handset. The automated pass cannot substitute for either.
-3. A deployment runbook based on the requirements in `docs/ARCHITECTURE.md`.
+3. Run the pipeline for real: the workflows, images and deploy scripts exist
+   and are locally verified, but have never been executed against a server.
 
 ### Deferred, because it is a product or architecture decision
 

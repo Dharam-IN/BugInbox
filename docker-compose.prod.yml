@@ -1,0 +1,151 @@
+# BugInbox production stack.
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Five containers. Images are pulled from GHCR, never built here: building on
+# the instance would run npm ci, vite and native module compilation on the
+# machine that is meant to be serving traffic.
+#
+# Differences from docker-compose.yml (the local development stack):
+#   * pulls images instead of building them
+#   * no Mailpit and no test fixture; mail goes to the SMTP server in .env
+#   * nothing is published on the host -- Caddy reaches `web` over a shared
+#     Docker network that Caddy is already on
+#   * the internal subnet avoids 172.31.0.0/16, the default AWS VPC range
+#
+# Both compose files use the project name `buginbox`, so never run this one and
+# the development one on the same machine.
+name: buginbox
+
+# Docker does not cap container logs by default, which will eventually fill a
+# small instance's disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# The api and the worker are the same image with different commands, and they
+# need the same settings.
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgres://${POSTGRES_USER:-buginbox}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-buginbox}
+  REDIS_URL: redis://redis:6379
+  STORAGE_DIR: /data/uploads
+  # Only the web container may set X-Forwarded-For. A CIDR rather than a fixed
+  # IP, so a recreated container keeps working; nothing else is on this network.
+  TRUSTED_PROXIES: ${BUGINBOX_INTERNAL_SUBNET:-10.83.0.0/24}
+  # Sessions are cookie-based and served over https, so this is not optional.
+  COOKIE_SECURE: "true"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-buginbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-buginbox}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-buginbox} -d ${POSTGRES_DB:-buginbox}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    networks: [internal]
+
+  api:
+    # Override these in .env to pin a specific build, e.g. ...:sha-1a2b3c4.
+    image: ${BUGINBOX_SERVER_IMAGE:-ghcr.io/dharam-in/buginbox-server:latest}
+    restart: unless-stopped
+    logging: *logging
+    env_file: [.env]
+    environment:
+      <<: *app-environment
+      HOST: 0.0.0.0
+      PORT: 3000
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [internal]
+
+  worker:
+    image: ${BUGINBOX_SERVER_IMAGE:-ghcr.io/dharam-in/buginbox-server:latest}
+    restart: unless-stopped
+    logging: *logging
+    command: ["node", "apps/server/dist/worker.js"]
+    env_file: [.env]
+    environment: *app-environment
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [internal]
+
+  web:
+    image: ${BUGINBOX_WEB_IMAGE:-ghcr.io/dharam-in/buginbox-web:latest}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      # Expanded into infra/nginx/prod.conf.template by nginx's entrypoint.
+      BUGINBOX_EDGE_CIDR: ${BUGINBOX_EDGE_CIDR:?set BUGINBOX_EDGE_CIDR in .env}
+    volumes:
+      - ./infra/nginx/prod.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      api: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      internal:
+      # Caddy resolves this container by the alias `buginbox-web`.
+      edge:
+        aliases: [buginbox-web]
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: ${BUGINBOX_INTERNAL_SUBNET:-10.83.0.0/24}
+
+  # The network Caddy is already on. `external: true` means Compose attaches to
+  # it and fails if it is absent -- it never creates it. Caddy is installed,
+  # configured and reloaded by you, outside this project. Do not remove
+  # `external: true`: without it Compose would create a network of its own and
+  # Caddy would no longer resolve `buginbox-web`.
+  edge:
+    external: true
+    name: ${BUGINBOX_EDGE_NETWORK:?set BUGINBOX_EDGE_NETWORK in .env}

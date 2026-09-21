@@ -1,0 +1,78 @@
+# BugInbox — Caddy site configuration. REFERENCE COPY ONLY.
+#
+# ============================================================================
+# Nothing in this repository reads, copies, generates, applies or reloads this
+# file. No script, Compose service, workflow step or installer touches Caddy.
+# Caddy is installed, configured, started and reloaded by you, on the server,
+# outside this project. This file exists so you have the correct configuration
+# to hand, and for no other reason.
+# ============================================================================
+#
+# This project does not own the global Caddyfile. Caddy on this server is
+# shared with other projects, so keep BugInbox's configuration in its own file
+# rather than pasting it into the global one. The usual arrangement:
+#
+#   /etc/caddy/Caddyfile            <- yours; contains a single import line
+#   /etc/caddy/sites/buginbox.caddy <- a copy of this file, edited by you
+#   /etc/caddy/sites/other.caddy    <- some other project, untouched by this one
+#
+# with the global Caddyfile carrying:
+#
+#   import sites/*.caddy
+#
+# Each project then owns one file, and adding or removing BugInbox never
+# involves editing a file another project also edits. If your Caddy is
+# containerised, the equivalent is a bind mount of that sites directory.
+#
+# To use it: copy this file to the server yourself, replace the hostname, and
+# reload Caddy yourself. Point the domain's A record at the instance first, or
+# the certificate request fails. Validate before reloading, so a mistake here
+# cannot take down the other sites:
+#
+#   caddy validate --config /etc/caddy/Caddyfile
+#
+# Do not reload while a deployment is mid-flight.
+#
+# The only thing the deployment does on the Caddy side is attach BugInbox's
+# `web` container to the Docker network Caddy is already on, which is an
+# ordinary container joining a network. It never creates that network, and it
+# never changes Caddy's configuration or lifecycle.
+
+buginbox.example.com {
+	# One upstream for everything. The dashboard is built with origin-relative
+	# URLs, and nginx inside that container serves the site, the SPA and the
+	# widget bundle and proxies /api/ to the API. There is no second route to
+	# add here and no CORS configuration to get wrong.
+	#
+	# `buginbox-web` is a network alias set by docker-compose.prod.yml, so it
+	# resolves regardless of the container's real name. It only resolves if
+	# Caddy and that container share a network.
+	reverse_proxy buginbox-web:80 {
+		# Caddy appends the real client address to X-Forwarded-For by default,
+		# which is what the web tier's real_ip configuration relies on to
+		# recover the reporter's address. Do not replace the header here.
+		health_uri /healthz
+		health_interval 30s
+		health_timeout 5s
+	}
+
+	# Screenshots are capped at 5 MiB by the application and 8 MiB by nginx.
+	# This matters only if your global configuration sets a smaller limit.
+	request_body {
+		max_size 8MB
+	}
+
+	header {
+		# TLS is terminated by Caddy, so HSTS belongs here. Start with a short
+		# max-age and raise it once you are confident; it is hard to undo.
+		Strict-Transport-Security "max-age=86400"
+		-Server
+	}
+
+	encode zstd gzip
+
+	# Deliberately no `log` block. Where Caddy writes its logs is a global,
+	# shared concern on a server with several sites, and this project has no
+	# business creating files under Caddy's log directory. Configure logging in
+	# your global Caddyfile if you want per-site logs.
+}

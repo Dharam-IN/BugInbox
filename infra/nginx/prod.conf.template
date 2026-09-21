@@ -1,0 +1,85 @@
+# BugInbox web tier, production.
+#
+# This is infra/nginx/default.conf plus one thing: recovering the real client
+# address from behind Caddy. Everything else is identical.
+#
+# Mounted at /etc/nginx/templates/default.conf.template, so nginx's entrypoint
+# expands ${BUGINBOX_EDGE_CIDR} from the container environment and writes the
+# result over /etc/nginx/conf.d/default.conf at startup. Only real environment
+# variables are substituted, so nginx's own $uri and $host are left alone.
+#
+# Why it is needed: locally nginx is the outermost proxy, so the socket address
+# is the reporter's. Here Caddy sits in front, so the socket address is Caddy's.
+# Caddy *appends* the true client address to X-Forwarded-For; with
+# real_ip_recursive off, nginx takes the LAST entry of that header, which is
+# exactly the address Caddy appended. Anything a client put in the header
+# themselves sits earlier in the list and is ignored, so $remote_addr is the
+# real reporter and still cannot be spoofed.
+#
+# Without this, every report records Caddy's address and the per-IP ingest and
+# authentication rate limits collapse into a single shared bucket.
+set_real_ip_from ${BUGINBOX_EDGE_CIDR};
+real_ip_header X-Forwarded-For;
+real_ip_recursive off;
+
+# Caddy sets X-Forwarded-Proto on every proxied request; fall back to this
+# hop's scheme if it is ever absent, so the API never sees an empty value.
+map $http_x_forwarded_proto $forwarded_proto {
+    ""      $scheme;
+    default $http_x_forwarded_proto;
+}
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    client_max_body_size 8m;
+    server_tokens off;
+
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Frame-Options "DENY" always;
+
+    # Docker's embedded DNS, re-resolved per request so a rebuilt API container
+    # with a new address does not leave nginx serving 502s.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    location /api/ {
+        set $api_upstream http://api:3000;
+        proxy_pass $api_upstream$request_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # Replace rather than append. $remote_addr is the reporter's real
+        # address thanks to set_real_ip_from above, and replacing means no
+        # client-supplied entry survives into the application's IP resolution.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_request_buffering off;
+        proxy_read_timeout 60s;
+        client_max_body_size 8m;
+    }
+
+    # Versioned widget bundle, loaded cross-origin from customers' websites.
+    location /widget/ {
+        alias /usr/share/nginx/widget/;
+        add_header Cache-Control "public, max-age=300" always;
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        types { application/javascript js; text/plain map; }
+        try_files $uri =404;
+    }
+
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

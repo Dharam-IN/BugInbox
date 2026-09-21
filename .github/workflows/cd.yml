@@ -1,0 +1,175 @@
+# Deploy to EC2.
+#
+# Six steps, in order:
+#   1. build the two Docker images
+#   2. push them to GHCR
+#   3. SSH into EC2
+#   4. pull the new images
+#   5. docker compose up -d
+#   6. one health check
+#
+# Runs only after CI has passed on main, so a failing build never deploys.
+# There is no rollback logic here on purpose: to go back to an earlier build,
+# set BUGINBOX_SERVER_IMAGE and BUGINBOX_WEB_IMAGE in the server's .env to an
+# older sha- tag and run `docker compose -f docker-compose.prod.yml up -d`
+# yourself. Every build is pushed with both `latest` and a `sha-` tag.
+#
+# This workflow does not install, configure, start, stop or reload Caddy, and
+# does not create the shared Docker network. Caddy is yours to manage on the
+# server.
+#
+# Required repository secrets:
+#   DEPLOY_HOST         the instance's hostname or IP
+#   DEPLOY_USER         the SSH user (a member of the docker group)
+#   DEPLOY_SSH_KEY      that user's private key, whole file including headers
+#   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan <host>`, to pin the host key
+# Optional repository variable:
+#   DEPLOY_PATH         deployment directory, default /opt/buginbox
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Never let two deploys touch the instance at once.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    name: Build, push and deploy
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    env:
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/buginbox' }}
+
+    steps:
+      - name: Work out what to deploy
+        id: target
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          # GHCR rejects uppercase in a repository path.
+          echo "registry=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Steps 1 and 2: build and push. Each image gets `latest`, which the
+      # compose file uses by default, and a `sha-` tag so a specific build can
+      # be pinned by hand later.
+      - name: Build and push the server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.target.outputs.registry }}/buginbox-server:${{ steps.target.outputs.tag }}
+            ${{ steps.target.outputs.registry }}/buginbox-server:latest
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,scope=server,mode=max
+
+      - name: Build and push the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.target.outputs.registry }}/buginbox-web:${{ steps.target.outputs.tag }}
+            ${{ steps.target.outputs.registry }}/buginbox-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # Two files, so the server is running the compose file and nginx config
+      # from this commit. The application itself travels in the images, and
+      # .env is never sent: it lives on the instance and this workflow does not
+      # know what is in it.
+      - name: Copy the compose file and nginx config
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "${USER}@${HOST}" "mkdir -p ${DEPLOY_PATH}/infra/nginx"
+          scp -i ~/.ssh/id_deploy docker-compose.prod.yml "${USER}@${HOST}:${DEPLOY_PATH}/"
+          scp -i ~/.ssh/id_deploy infra/nginx/prod.conf.template "${USER}@${HOST}:${DEPLOY_PATH}/infra/nginx/"
+
+      # Steps 3 to 6. These are the same commands you would run by hand on the
+      # server, in the same order.
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # This run's own token, which expires when the job ends, so no
+          # long-lived registry credential is left on the instance.
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/id_deploy "${USER}@${HOST}" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+          ssh -i ~/.ssh/id_deploy "${USER}@${HOST}" bash -se <<EOF
+          set -euo pipefail
+          cd ${DEPLOY_PATH}
+
+          docker compose -f docker-compose.prod.yml pull
+          # --wait blocks until the containers report healthy, or fails.
+          docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 180
+
+          # The one health check: 'ready' also covers Postgres and Redis, and
+          # returns 503 if the database is unreachable, so -f fails the deploy.
+          docker compose -f docker-compose.prod.yml exec -T api \
+            curl -fsS http://127.0.0.1:3000/api/health/ready
+
+          docker logout ghcr.io
+          EOF
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy ${{ job.status }}"
+            echo "- Commit: \`${{ steps.target.outputs.sha }}\`"
+            echo "- Tags pushed: \`${{ steps.target.outputs.tag }}\` and \`latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
